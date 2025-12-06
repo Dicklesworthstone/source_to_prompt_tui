@@ -41,6 +41,157 @@ const ProgressBar: React.FC<ProgressBarProps> = ({ percent, color = "green", wid
   );
 };
 
+/* ---------- Scrollable Box Component ---------- */
+interface ScrollableBoxProps {
+  children: React.ReactNode;
+  height: number;
+  scrollOffset: number;
+  totalItems: number;
+  visibleItems: number;
+  showScrollbar?: boolean;
+}
+
+const ScrollableBox: React.FC<ScrollableBoxProps> = ({
+  children,
+  height,
+  scrollOffset,
+  totalItems,
+  visibleItems,
+  showScrollbar = true
+}) => {
+  const needsScrollbar = totalItems > visibleItems;
+
+  // Calculate scrollbar position and size
+  const trackHeight = Math.max(1, height - 2); // Leave room for arrows
+  const thumbSize = Math.max(1, Math.round((visibleItems / totalItems) * trackHeight));
+  const maxThumbPos = trackHeight - thumbSize;
+  const scrollRatio = totalItems > visibleItems ? scrollOffset / (totalItems - visibleItems) : 0;
+  const thumbPos = Math.round(scrollRatio * maxThumbPos);
+
+  const scrollbarChars = [];
+  if (needsScrollbar && showScrollbar) {
+    scrollbarChars.push(scrollOffset > 0 ? "^" : "|");
+    for (let i = 0; i < trackHeight; i++) {
+      if (i >= thumbPos && i < thumbPos + thumbSize) {
+        scrollbarChars.push("#");
+      } else {
+        scrollbarChars.push("|");
+      }
+    }
+    scrollbarChars.push(scrollOffset + visibleItems < totalItems ? "v" : "|");
+  }
+
+  return (
+    <Box flexDirection="row" height={height}>
+      <Box flexDirection="column" flexGrow={1} overflow="hidden">
+        {children}
+      </Box>
+      {needsScrollbar && showScrollbar && (
+        <Box flexDirection="column" width={1}>
+          {scrollbarChars.map((char, i) => (
+            <Text key={i} dimColor={char === "|"} color={char === "#" ? "cyan" : undefined}>
+              {char}
+            </Text>
+          ))}
+        </Box>
+      )}
+    </Box>
+  );
+};
+
+/* ---------- Help Modal Component ---------- */
+interface HelpModalProps {
+  onClose: () => void;
+  rows: number;
+  cols: number;
+}
+
+const HelpModal: React.FC<HelpModalProps> = ({ onClose, rows, cols }) => {
+  const modalWidth = Math.min(80, cols - 4);
+  const modalHeight = Math.min(30, rows - 4);
+
+  return (
+    <Box
+      position="absolute"
+      flexDirection="column"
+      width={cols}
+      height={rows}
+      justifyContent="center"
+      alignItems="center"
+    >
+      <Box
+        flexDirection="column"
+        width={modalWidth}
+        height={modalHeight}
+        borderStyle="double"
+        borderColor="cyan"
+        padding={1}
+      >
+        <Box justifyContent="center" marginBottom={1}>
+          <Text bold color="cyan">Help - Keyboard Shortcuts</Text>
+        </Box>
+
+        <Box flexDirection="row" justifyContent="space-between">
+          <Box flexDirection="column" width="48%">
+            <Text bold color="yellow">Global</Text>
+            <Text>  F1         Show this help</Text>
+            <Text>  Esc        Exit (press twice to quit)</Text>
+            <Text>  Ctrl+C     Force quit</Text>
+            <Text>  Ctrl+G     Generate combined prompt</Text>
+            <Text>  Tab        Switch panes</Text>
+            <Text></Text>
+            <Text bold color="yellow">Explorer Pane</Text>
+            <Text>  j/k        Move cursor down/up</Text>
+            <Text>  h/l        Collapse/expand directory</Text>
+            <Text>  Space      Toggle file selection</Text>
+            <Text>  Enter      Toggle select/expand</Text>
+            <Text>  / or f     Filter files</Text>
+            <Text>  d          Change root directory</Text>
+            <Text>  u          Clear filtered selection</Text>
+          </Box>
+
+          <Box flexDirection="column" width="48%">
+            <Text bold color="yellow">Quick Select (Explorer)</Text>
+            <Text>  t          All text files</Text>
+            <Text>  1-9,0,r    JS/React/TS/JSON/MD/...</Text>
+            <Text></Text>
+            <Text bold color="yellow">Config Pane</Text>
+            <Text>  Left/Right Switch tabs</Text>
+            <Text>  p/g        Edit preamble/goal</Text>
+            <Text>  i/o        Toggle preamble/goal</Text>
+            <Text>  x/m        Toggle comments/minify</Text>
+            <Text>  s/l/d      Save/load/delete preset</Text>
+            <Text></Text>
+            <Text bold color="yellow">Combined Output View</Text>
+            <Text>  y          Copy to clipboard</Text>
+            <Text>  w          Save to file</Text>
+            <Text>  Esc/q      Return to main view</Text>
+          </Box>
+        </Box>
+
+        <Box justifyContent="center" marginTop={1}>
+          <Text dimColor>Press Esc or F1 to close</Text>
+        </Box>
+      </Box>
+    </Box>
+  );
+};
+
+/* ---------- Exit Confirmation Component ---------- */
+interface ExitConfirmProps {
+  onCancel: () => void;
+}
+
+const ExitConfirm: React.FC<ExitConfirmProps> = ({ onCancel }) => {
+  return (
+    <Box>
+      <Text color="yellow" bold>
+        Press Esc again to quit, or any other key to cancel
+      </Text>
+    </Box>
+  );
+};
+
 /* ---------- Types & constants ---------- */
 
 type Pane = "explorer" | "config" | "preview";
@@ -1038,6 +1189,15 @@ const App: React.FC = () => {
 
   const [promptPreview, setPromptPreview] = useState("");
 
+  // UI state for modals and exit confirmation
+  const [showHelp, setShowHelp] = useState(false);
+  const [confirmExit, setConfirmExit] = useState(false);
+
+  // Scroll offsets for different panes
+  const [previewScrollOffset, setPreviewScrollOffset] = useState(0);
+  const [promptSampleScrollOffset, setPromptSampleScrollOffset] = useState(0);
+  const [combinedScrollOffset, setCombinedScrollOffset] = useState(0);
+
   const rows = stdout.rows ?? 30;
   const cols = stdout.columns ?? 120;
   const listHeight = Math.max(8, rows - 16);
@@ -1473,9 +1633,44 @@ const App: React.FC = () => {
   };
 
   useInput((input, key) => {
+    // Force quit with Ctrl+C
     if (key.ctrl && input === "c") {
       exit();
       return;
+    }
+
+    // F1 toggles help modal (check for function key)
+    if (input === "\x1bOP" || input === "\x1b[11~" || (key.meta && input === "1")) {
+      setShowHelp(prev => !prev);
+      setConfirmExit(false);
+      return;
+    }
+
+    // If help modal is shown, Esc or F1 closes it
+    if (showHelp) {
+      if (key.escape || input === "\x1bOP" || input === "\x1b[11~") {
+        setShowHelp(false);
+      }
+      return;
+    }
+
+    // Two-stage Escape to quit (in main mode, not in combined view)
+    if (key.escape && mode === "main" && focusField === "none") {
+      if (confirmExit) {
+        exit();
+        return;
+      } else {
+        setConfirmExit(true);
+        setStatus("Press Esc again to quit, or any other key to cancel.");
+        return;
+      }
+    }
+
+    // Any non-Escape key cancels the exit confirmation
+    if (confirmExit && !key.escape) {
+      setConfirmExit(false);
+      setStatus("Exit cancelled.");
+      // Don't return - continue processing the key
     }
 
     if (mode === "combined") {
@@ -1495,6 +1690,7 @@ const App: React.FC = () => {
       const lower = input.toLowerCase();
       if (key.escape || lower === "q") {
         setMode("main");
+        setCombinedScrollOffset(0);
         setStatus("Back to main view.");
         return;
       }
@@ -1512,6 +1708,29 @@ const App: React.FC = () => {
       }
       if (lower === "w") {
         setFocusField("exportPath");
+        return;
+      }
+      // Scrolling in combined view
+      if (key.upArrow || input === "k") {
+        setCombinedScrollOffset(prev => Math.max(0, prev - 1));
+        return;
+      }
+      if (key.downArrow || input === "j") {
+        if (combined) {
+          const maxScroll = Math.max(0, combined.lines - (rows - 15));
+          setCombinedScrollOffset(prev => Math.min(maxScroll, prev + 1));
+        }
+        return;
+      }
+      if (key.pageUp || input === "b") {
+        setCombinedScrollOffset(prev => Math.max(0, prev - (rows - 15)));
+        return;
+      }
+      if (key.pageDown || input === " ") {
+        if (combined) {
+          const maxScroll = Math.max(0, combined.lines - (rows - 15));
+          setCombinedScrollOffset(prev => Math.min(maxScroll, prev + (rows - 15)));
+        }
         return;
       }
       return;
@@ -1784,6 +2003,13 @@ const App: React.FC = () => {
   }
 
   if (mode === "combined") {
+    const combinedLines = combined ? combined.text.split("\n") : [];
+    const combinedViewHeight = rows - 15;
+    const visibleCombinedLines = combinedLines.slice(
+      combinedScrollOffset,
+      combinedScrollOffset + combinedViewHeight
+    );
+
     return (
       <Box flexDirection="column" height={rows} width={cols} paddingX={1}>
         <Box justifyContent="center" height={3}>
@@ -1792,16 +2018,39 @@ const App: React.FC = () => {
           </Gradient>
         </Box>
         <Box
-          flexDirection="column"
+          flexDirection="row"
           borderStyle="round"
           borderColor="cyan"
           paddingX={1}
           paddingY={1}
           flexGrow={1}
         >
-          <Text>
-            {combined ? combined.text : "(nothing generated yet)"}
-          </Text>
+          <Box flexDirection="column" flexGrow={1} overflow="hidden">
+            {visibleCombinedLines.map((line, idx) => (
+              <Text key={idx}>{line || " "}</Text>
+            ))}
+          </Box>
+          {combinedLines.length > combinedViewHeight && (
+            <Box flexDirection="column" width={1} marginLeft={1}>
+              <Text color={combinedScrollOffset > 0 ? "cyan" : "gray"}>^</Text>
+              {Array.from({ length: Math.max(1, combinedViewHeight - 2) }).map((_, i) => {
+                const trackHeight = combinedViewHeight - 2;
+                const thumbSize = Math.max(1, Math.round((combinedViewHeight / combinedLines.length) * trackHeight));
+                const maxThumbPos = trackHeight - thumbSize;
+                const scrollRatio = combinedLines.length > combinedViewHeight
+                  ? combinedScrollOffset / (combinedLines.length - combinedViewHeight)
+                  : 0;
+                const thumbPos = Math.round(scrollRatio * maxThumbPos);
+                const isThumb = i >= thumbPos && i < thumbPos + thumbSize;
+                return (
+                  <Text key={i} color={isThumb ? "cyan" : "gray"}>
+                    {isThumb ? "#" : "|"}
+                  </Text>
+                );
+              })}
+              <Text color={combinedScrollOffset + combinedViewHeight < combinedLines.length ? "cyan" : "gray"}>v</Text>
+            </Box>
+          )}
         </Box>
         <Box
           borderTop
@@ -1812,7 +2061,7 @@ const App: React.FC = () => {
         >
           <Box justifyContent="space-between">
             <Text dimColor>
-              [Y] Copy  [W] Save to file  [Esc/Q] Back
+              [J/K] Scroll  [Space/B] Page  [Y] Copy  [W] Save  [Esc/Q] Back
             </Text>
             {combined && (
               <Text>
@@ -1923,50 +2172,74 @@ const App: React.FC = () => {
               />
             </Box>
 
-            <Box flexDirection="column" paddingLeft={1}>
-              {viewNodes.length === 0 && (
-                <Text dimColor>No files match current filter.</Text>
+            <Box flexDirection="row" flexGrow={1}>
+              <Box flexDirection="column" paddingLeft={1} flexGrow={1} overflow="hidden">
+                {viewNodes.length === 0 && (
+                  <Text dimColor>No files match current filter.</Text>
+                )}
+                {viewNodes.map((node, idx) => {
+                  const isCursor = scrollOffset + idx === cursor;
+                  const isSel = selected.has(node.path);
+                  const marker = isCursor ? ">" : " ";
+                  const indent = filter.trim() ? 0 : node.depth;
+                  const icon = node.isDirectory
+                    ? expanded.has(node.path)
+                      ? "[-]"
+                      : "[+]"
+                    : isSel
+                    ? "[x]"
+                    : node.isText
+                    ? "[ ]"
+                    : "[!]";
+
+                  let color: any = node.isDirectory
+                    ? "yellow"
+                    : node.isText
+                    ? isSel
+                      ? "green"
+                      : "white"
+                    : "red";
+
+                  if (isCursor) color = "cyan";
+
+                  return (
+                    <Box key={node.path}>
+                      <Text color={isCursor ? "cyan" : "gray"}>{marker}</Text>
+                      <Text dimColor>{" ".repeat(indent)}</Text>
+                      <Text color={color}>
+                        {icon}{" "}
+                        {node.relPath === "." ? node.name : node.relPath}{" "}
+                        {!node.isDirectory &&
+                          `(${formatBytes(node.sizeBytes)}${
+                            node.isText ? "" : ", binary"
+                          })`}
+                      </Text>
+                    </Box>
+                  );
+                })}
+              </Box>
+              {/* Explorer scrollbar */}
+              {visibleNodes.length > listHeight && (
+                <Box flexDirection="column" width={1}>
+                  <Text color={scrollOffset > 0 ? "cyan" : "gray"}>^</Text>
+                  {Array.from({ length: Math.max(1, listHeight - 2) }).map((_, i) => {
+                    const trackHeight = listHeight - 2;
+                    const thumbSize = Math.max(1, Math.round((listHeight / visibleNodes.length) * trackHeight));
+                    const maxThumbPos = trackHeight - thumbSize;
+                    const scrollRatio = visibleNodes.length > listHeight
+                      ? scrollOffset / (visibleNodes.length - listHeight)
+                      : 0;
+                    const thumbPos = Math.round(scrollRatio * maxThumbPos);
+                    const isThumb = i >= thumbPos && i < thumbPos + thumbSize;
+                    return (
+                      <Text key={i} color={isThumb ? "cyan" : "gray"}>
+                        {isThumb ? "#" : "|"}
+                      </Text>
+                    );
+                  })}
+                  <Text color={scrollOffset + listHeight < visibleNodes.length ? "cyan" : "gray"}>v</Text>
+                </Box>
               )}
-              {viewNodes.map((node, idx) => {
-                const isCursor = scrollOffset + idx === cursor;
-                const isSel = selected.has(node.path);
-                const marker = isCursor ? ">" : " ";
-                const indent = filter.trim() ? 0 : node.depth;
-                const icon = node.isDirectory
-                  ? expanded.has(node.path)
-                    ? "[-]"
-                    : "[+]"
-                  : isSel
-                  ? "[x]"
-                  : node.isText
-                  ? "[ ]"
-                  : "[!]";
-
-                let color: any = node.isDirectory
-                  ? "yellow"
-                  : node.isText
-                  ? isSel
-                    ? "green"
-                    : "white"
-                  : "red";
-
-                if (isCursor) color = "cyan";
-
-                return (
-                  <Box key={node.path}>
-                    <Text color={isCursor ? "cyan" : "gray"}>{marker}</Text>
-                    <Text dimColor>{" ".repeat(indent)}</Text>
-                    <Text color={color}>
-                      {icon}{" "}
-                      {node.relPath === "." ? node.name : node.relPath}{" "}
-                      {!node.isDirectory &&
-                        `(${formatBytes(node.sizeBytes)}${
-                          node.isText ? "" : ", binary"
-                        })`}
-                    </Text>
-                  </Box>
-                );
-              })}
             </Box>
           </Box>
 
@@ -2224,16 +2497,16 @@ const App: React.FC = () => {
       >
         <Box flexDirection="column">
           <Text dimColor>
-            Panes: Tab | Explorer: j/k, h/l, Space/Enter, / or F filter, D root, T/1-9/0/R quick
-            select, U clear filter selection
+            F1: Help | Tab: Panes | Explorer: j/k, h/l, Space/Enter, / filter, D root, T/1-9/0/R quick select
           </Text>
           <Text dimColor>
-            Config: arrows to tab, P/G (inputs), S/L/D (presets), I/O/X/M (options) | Generate:
-            Ctrl+G | Combined view: [Y] copy, [W] save, [Esc/Q] back
+            Config: arrows, P/G/I/O/X/M, S/L/D | Ctrl+G: Generate | Esc: Quit (2x)
           </Text>
         </Box>
         <Box alignItems="flex-end">
-          {scanError ? (
+          {confirmExit ? (
+            <Text color="yellow" bold>Press Esc again to quit</Text>
+          ) : scanError ? (
             <Text color="red">Error: {scanError}</Text>
           ) : (
             <Text color={status.startsWith("Ready") ? "white" : "green"}>
@@ -2242,6 +2515,9 @@ const App: React.FC = () => {
           )}
         </Box>
       </Box>
+
+      {/* Help Modal Overlay */}
+      {showHelp && <HelpModal onClose={() => setShowHelp(false)} rows={rows} cols={cols} />}
     </Box>
   );
 };
