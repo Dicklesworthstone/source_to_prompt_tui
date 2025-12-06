@@ -25,3 +25,6 @@ bun-debug.log*
 .idea/
 .vscode/
 
+# Lock files (optional - you may want to keep bun.lockb for reproducible builds)
+# bun.lockb
+
