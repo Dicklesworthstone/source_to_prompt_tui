@@ -9,7 +9,6 @@ REPO="${REPO:-source_to_prompt_tui}"
 BINARY="${BINARY:-s2p}"
 DEST_DEFAULT="$HOME/.local/bin"
 DEST="${DEST:-$DEST_DEFAULT}"
-EASY=0
 QUIET=0
 FROM_SOURCE=0
 LOCK_FILE="/tmp/s2p-install.lock"
@@ -24,7 +23,15 @@ err()  { log "\033[0;31m✗\033[0m $*"; }
 
 usage() {
   cat <<'EOFU'
-Usage: install.sh [--version vX.Y.Z] [--dest DIR] [--system] [--from-source] [--easy-mode] [--quiet] [--verify]
+Usage: install.sh [--version vX.Y.Z] [--dest DIR] [--system] [--from-source] [--quiet] [--verify]
+
+Options:
+  --version vX.Y.Z   Install specific version (default: latest release)
+  --dest DIR         Install directory (default: ~/.local/bin)
+  --system           Install to /usr/local/bin (may require sudo)
+  --from-source      Build from source instead of downloading binary
+  --quiet, -q        Suppress output
+  --verify           Require checksum verification (fail if unavailable)
 
 Environment overrides:
   VERSION         Tag to install (defaults to latest release)
@@ -42,7 +49,6 @@ while [ $# -gt 0 ]; do
     --dest) DEST="$2"; shift 2;;
     --system) DEST="/usr/local/bin"; shift;;
     --from-source) FROM_SOURCE=1; shift;;
-    --easy-mode) EASY=1; shift;;
     --verify) VERIFY=1; shift;;
     --quiet|-q) QUIET=1; shift;;
     -h|--help) usage; exit 0;;
@@ -52,27 +58,33 @@ done
 
 maybe_add_path() {
   case ":$PATH:" in
-    *:"$DEST":*) return 0;;
+    *:"$DEST":*)
+      ok "${DEST} is already in PATH"
+      return 0
+      ;;
     *)
-      if [ "$EASY" -eq 1 ]; then
-        UPDATED=0
-        for rc in "$HOME/.zshrc" "$HOME/.bashrc"; do
-          if [ -e "$rc" ] && [ -w "$rc" ]; then
-            if ! grep -F "$DEST" "$rc" >/dev/null 2>&1; then
-              echo "export PATH=\"$DEST:\$PATH\"" >> "$rc"
-              UPDATED=1
-            fi
+      # Always try to update shell config files
+      UPDATED=0
+      UPDATED_FILES=""
+      for rc in "$HOME/.zshrc" "$HOME/.bashrc" "$HOME/.profile"; do
+        if [ -e "$rc" ] && [ -w "$rc" ]; then
+          if ! grep -F "$DEST" "$rc" >/dev/null 2>&1; then
+            echo "" >> "$rc"
+            echo "# Added by s2p installer" >> "$rc"
+            echo "export PATH=\"$DEST:\$PATH\"" >> "$rc"
+            UPDATED=1
+            UPDATED_FILES="${UPDATED_FILES} $(basename "$rc")"
           fi
-        done
-        if [ "$UPDATED" -eq 1 ]; then
-          warn "PATH updated in ~/.zshrc/.bashrc; restart your shell to use ${BINARY}"
-        else
-          warn "Add $DEST to PATH to use ${BINARY} (export PATH=\"$DEST:\$PATH\")"
         fi
+      done
+      if [ "$UPDATED" -eq 1 ]; then
+        ok "PATH updated in:${UPDATED_FILES}"
+        info "Restart your shell or run: source ~/.zshrc (or ~/.bashrc)"
       else
-        warn "Add $DEST to PATH to use ${BINARY} (export PATH=\"$DEST:\$PATH\")"
+        warn "Could not update shell config. Add to PATH manually:"
+        warn "  export PATH=\"$DEST:\$PATH\""
       fi
-    ;;
+      ;;
   esac
 }
 

@@ -4,7 +4,7 @@ import { render, Box, Text, useInput, useApp, useStdout } from "ink";
 import TextInput from "ink-text-input";
 import Spinner from "ink-spinner";
 import Gradient from "ink-gradient";
-import BigText from "ink-big-text";
+// BigText removed - cfonts breaks bun compile (runtime require of package.json)
 import SyntaxHighlight from "ink-syntax-highlight";
 import fs from "node:fs";
 import fsp from "node:fs/promises";
@@ -46,67 +46,109 @@ interface ScrollableBoxProps {
   children: React.ReactNode;
   height: number;
   scrollOffset: number;
-  totalItems: number;
-  visibleItems: number;
   showScrollbar?: boolean;
+  accentColor?: string;
 }
 
 const ScrollableBox: React.FC<ScrollableBoxProps> = ({
   children,
   height,
   scrollOffset,
-  totalItems,
-  visibleItems,
-  showScrollbar = true
+  showScrollbar = true,
+  accentColor = "cyan"
 }) => {
-  const needsScrollbar = totalItems > visibleItems;
+  const childArray = React.Children.toArray(children);
+  const totalItems = childArray.length;
+  const needsScrollbar = totalItems > height;
+  const visibleChildren = childArray.slice(scrollOffset, scrollOffset + height);
 
-  // Calculate scrollbar position and size
-  const trackHeight = Math.max(1, height - 2); // Leave room for arrows
-  const thumbSize = Math.max(1, Math.round((visibleItems / totalItems) * trackHeight));
-  const maxThumbPos = trackHeight - thumbSize;
-  const scrollRatio = totalItems > visibleItems ? scrollOffset / (totalItems - visibleItems) : 0;
+  // Calculate scrollbar metrics (only used when scrollbar is shown)
+  const trackHeight = Math.max(1, height - 2); // -2 for up/down arrows
+  const thumbSize = totalItems > 0
+    ? Math.max(1, Math.round((height / totalItems) * trackHeight))
+    : 1;
+  const maxThumbPos = Math.max(0, trackHeight - thumbSize);
+  const scrollRatio = totalItems > height
+    ? scrollOffset / (totalItems - height)
+    : 0;
   const thumbPos = Math.round(scrollRatio * maxThumbPos);
 
-  const scrollbarChars = [];
-  if (needsScrollbar && showScrollbar) {
-    scrollbarChars.push(scrollOffset > 0 ? "^" : "|");
-    for (let i = 0; i < trackHeight; i++) {
-      if (i >= thumbPos && i < thumbPos + thumbSize) {
-        scrollbarChars.push("#");
-      } else {
-        scrollbarChars.push("|");
-      }
-    }
-    scrollbarChars.push(scrollOffset + visibleItems < totalItems ? "v" : "|");
-  }
+  const canScrollUp = scrollOffset > 0;
+  const canScrollDown = scrollOffset + height < totalItems;
 
   return (
     <Box flexDirection="row" height={height}>
       <Box flexDirection="column" flexGrow={1} overflow="hidden">
-        {children}
+        {visibleChildren}
       </Box>
-      {needsScrollbar && showScrollbar && (
-        <Box flexDirection="column" width={1}>
-          {scrollbarChars.map((char, i) => (
-            <Text key={i} dimColor={char === "|"} color={char === "#" ? "cyan" : undefined}>
-              {char}
-            </Text>
-          ))}
+      {showScrollbar && needsScrollbar && (
+        <Box flexDirection="column" width={1} marginLeft={1}>
+          <Text color={canScrollUp ? accentColor : "gray"}>^</Text>
+          {Array.from({ length: trackHeight }).map((_, i) => {
+            const isThumb = i >= thumbPos && i < thumbPos + thumbSize;
+            return (
+              <Text key={i} color={isThumb ? accentColor : "gray"}>
+                {isThumb ? "#" : "|"}
+              </Text>
+            );
+          })}
+          <Text color={canScrollDown ? accentColor : "gray"}>v</Text>
         </Box>
       )}
     </Box>
   );
 };
 
-/* ---------- Help Modal Component ---------- */
-interface HelpModalProps {
-  onClose: () => void;
+/* ---------- Exit Confirm Modal Component ---------- */
+interface ExitConfirmProps {
   rows: number;
   cols: number;
 }
 
-const HelpModal: React.FC<HelpModalProps> = ({ onClose, rows, cols }) => {
+const ExitConfirm: React.FC<ExitConfirmProps> = ({ rows, cols }) => {
+  const modalWidth = 50;
+  const modalHeight = 9;
+
+  return (
+    <Box
+      position="absolute"
+      flexDirection="column"
+      width={cols}
+      height={rows}
+      justifyContent="center"
+      alignItems="center"
+    >
+      <Box
+        flexDirection="column"
+        width={modalWidth}
+        height={modalHeight}
+        borderStyle="double"
+        borderColor="yellow"
+        padding={1}
+        alignItems="center"
+        justifyContent="center"
+      >
+        <Box marginBottom={1}>
+          <Text bold color="yellow">Exit Confirmation</Text>
+        </Box>
+        <Text>Are you sure you want to quit?</Text>
+        <Box marginTop={1}>
+          <Text dimColor>Press </Text>
+          <Text bold color="red">Esc</Text>
+          <Text dimColor> to quit, any other key to cancel</Text>
+        </Box>
+      </Box>
+    </Box>
+  );
+};
+
+/* ---------- Help Modal Component ---------- */
+interface HelpModalProps {
+  rows: number;
+  cols: number;
+}
+
+const HelpModal: React.FC<HelpModalProps> = ({ rows, cols }) => {
   const modalWidth = Math.min(80, cols - 4);
   const modalHeight = Math.min(30, rows - 4);
 
@@ -173,21 +215,6 @@ const HelpModal: React.FC<HelpModalProps> = ({ onClose, rows, cols }) => {
           <Text dimColor>Press Esc or F1 to close</Text>
         </Box>
       </Box>
-    </Box>
-  );
-};
-
-/* ---------- Exit Confirmation Component ---------- */
-interface ExitConfirmProps {
-  onCancel: () => void;
-}
-
-const ExitConfirm: React.FC<ExitConfirmProps> = ({ onCancel }) => {
-  return (
-    <Box>
-      <Text color="yellow" bold>
-        Press Esc again to quit, or any other key to cancel
-      </Text>
     </Box>
   );
 };
@@ -356,8 +383,6 @@ const TEXT_EXTENSIONS = new Set<string>([
   ".zsh",
   ".fish",
   ".env",
-  ".gitignore",
-  ".gitattributes",
   ".toml",
   ".ini",
   ".cfg",
@@ -388,15 +413,7 @@ const TEXT_EXTENSIONS = new Set<string>([
   ".tf",
   ".tfvars",
   ".dockerfile",
-  ".containerfile",
-  ".editorconfig",
-  ".prettierrc",
-  ".eslintrc",
-  ".babelrc",
-  ".npmrc",
-  ".nvmrc",
-  ".dockerignore",
-  ".helmignore"
+  ".containerfile"
 ]);
 
 // Files without extensions that are known to be text
@@ -426,9 +443,15 @@ const TEXT_FILENAMES = new Set<string>([
   ".gitattributes",
   ".gitmodules",
   ".editorconfig",
+  ".prettierrc",
   ".prettierignore",
+  ".eslintrc",
   ".eslintignore",
+  ".babelrc",
+  ".npmrc",
+  ".nvmrc",
   ".dockerignore",
+  ".helmignore",
   ".npmignore"
 ]);
 
@@ -486,10 +509,6 @@ function getFileCategory(ext: string): FileCategory {
 function isTextFile(ext: string, filename: string): boolean {
   if (TEXT_EXTENSIONS.has(ext.toLowerCase())) return true;
   if (TEXT_FILENAMES.has(filename)) return true;
-  // Check for files that start with a dot but have no other extension
-  if (filename.startsWith(".") && !ext) {
-    return TEXT_FILENAMES.has(filename);
-  }
   return false;
 }
 
@@ -1193,9 +1212,7 @@ const App: React.FC = () => {
   const [showHelp, setShowHelp] = useState(false);
   const [confirmExit, setConfirmExit] = useState(false);
 
-  // Scroll offsets for different panes
-  const [previewScrollOffset, setPreviewScrollOffset] = useState(0);
-  const [promptSampleScrollOffset, setPromptSampleScrollOffset] = useState(0);
+  // Scroll offset for combined view
   const [combinedScrollOffset, setCombinedScrollOffset] = useState(0);
 
   const rows = stdout.rows ?? 30;
@@ -1286,11 +1303,6 @@ const App: React.FC = () => {
       setScrollOffset(cursor - listHeight + 1);
     }
   }, [cursor, scrollOffset, listHeight]);
-
-  const viewNodes = useMemo(
-    () => visibleNodes.slice(scrollOffset, scrollOffset + listHeight),
-    [visibleNodes, scrollOffset, listHeight]
-  );
 
   const debouncedStats = useMemo(
     () =>
@@ -1661,7 +1673,7 @@ const App: React.FC = () => {
         return;
       } else {
         setConfirmExit(true);
-        setStatus("Press Esc again to quit, or any other key to cancel.");
+        // Note: Status bar already shows "Press Esc again to quit" via render ternary
         return;
       }
     }
@@ -1711,25 +1723,26 @@ const App: React.FC = () => {
         return;
       }
       // Scrolling in combined view
+      const viewHeight = Math.max(5, rows - 15);
       if (key.upArrow || input === "k") {
         setCombinedScrollOffset(prev => Math.max(0, prev - 1));
         return;
       }
       if (key.downArrow || input === "j") {
         if (combined) {
-          const maxScroll = Math.max(0, combined.lines - (rows - 15));
+          const maxScroll = Math.max(0, combined.lines - viewHeight);
           setCombinedScrollOffset(prev => Math.min(maxScroll, prev + 1));
         }
         return;
       }
       if (key.pageUp || input === "b") {
-        setCombinedScrollOffset(prev => Math.max(0, prev - (rows - 15)));
+        setCombinedScrollOffset(prev => Math.max(0, prev - viewHeight));
         return;
       }
       if (key.pageDown || input === " ") {
         if (combined) {
-          const maxScroll = Math.max(0, combined.lines - (rows - 15));
-          setCombinedScrollOffset(prev => Math.min(maxScroll, prev + (rows - 15)));
+          const maxScroll = Math.max(0, combined.lines - viewHeight);
+          setCombinedScrollOffset(prev => Math.min(maxScroll, prev + viewHeight));
         }
         return;
       }
@@ -2004,17 +2017,13 @@ const App: React.FC = () => {
 
   if (mode === "combined") {
     const combinedLines = combined ? combined.text.split("\n") : [];
-    const combinedViewHeight = rows - 15;
-    const visibleCombinedLines = combinedLines.slice(
-      combinedScrollOffset,
-      combinedScrollOffset + combinedViewHeight
-    );
+    const combinedViewHeight = Math.max(5, rows - 15);
 
     return (
       <Box flexDirection="column" height={rows} width={cols} paddingX={1}>
-        <Box justifyContent="center" height={3}>
+        <Box justifyContent="center" height={3} alignItems="center">
           <Gradient name="pastel">
-            <BigText text="Combined Prompt" font="tiny" />
+            <Text bold>══════ Combined Prompt ══════</Text>
           </Gradient>
         </Box>
         <Box
@@ -2025,32 +2034,16 @@ const App: React.FC = () => {
           paddingY={1}
           flexGrow={1}
         >
-          <Box flexDirection="column" flexGrow={1} overflow="hidden">
-            {visibleCombinedLines.map((line, idx) => (
+          <ScrollableBox
+            height={combinedViewHeight}
+            scrollOffset={combinedScrollOffset}
+            showScrollbar={combinedLines.length > combinedViewHeight}
+            accentColor="cyan"
+          >
+            {combinedLines.map((line, idx) => (
               <Text key={idx}>{line || " "}</Text>
             ))}
-          </Box>
-          {combinedLines.length > combinedViewHeight && (
-            <Box flexDirection="column" width={1} marginLeft={1}>
-              <Text color={combinedScrollOffset > 0 ? "cyan" : "gray"}>^</Text>
-              {Array.from({ length: Math.max(1, combinedViewHeight - 2) }).map((_, i) => {
-                const trackHeight = combinedViewHeight - 2;
-                const thumbSize = Math.max(1, Math.round((combinedViewHeight / combinedLines.length) * trackHeight));
-                const maxThumbPos = trackHeight - thumbSize;
-                const scrollRatio = combinedLines.length > combinedViewHeight
-                  ? combinedScrollOffset / (combinedLines.length - combinedViewHeight)
-                  : 0;
-                const thumbPos = Math.round(scrollRatio * maxThumbPos);
-                const isThumb = i >= thumbPos && i < thumbPos + thumbSize;
-                return (
-                  <Text key={i} color={isThumb ? "cyan" : "gray"}>
-                    {isThumb ? "#" : "|"}
-                  </Text>
-                );
-              })}
-              <Text color={combinedScrollOffset + combinedViewHeight < combinedLines.length ? "cyan" : "gray"}>v</Text>
-            </Box>
-          )}
+          </ScrollableBox>
         </Box>
         <Box
           borderTop
@@ -2107,15 +2100,15 @@ const App: React.FC = () => {
     );
   }
 
-  const explorerWidth = Math.floor(cols * 0.4);
-  const configWidth = Math.floor(cols * 0.3);
-  const previewWidth = cols - explorerWidth - configWidth - 4;
+  const explorerWidth = Math.max(20, Math.floor(cols * 0.4));
+  const configWidth = Math.max(15, Math.floor(cols * 0.3));
+  const previewWidth = Math.max(10, cols - explorerWidth - configWidth - 4);
 
   return (
     <Box flexDirection="column" height={rows} width={cols} paddingX={1}>
-      <Box justifyContent="center" height={3}>
+      <Box justifyContent="center" height={3} alignItems="center">
         <Gradient name="morning">
-          <BigText text="Source2Prompt" font="tiny" />
+          <Text bold>══════ Source2Prompt ══════</Text>
         </Gradient>
       </Box>
 
@@ -2172,73 +2165,57 @@ const App: React.FC = () => {
               />
             </Box>
 
-            <Box flexDirection="row" flexGrow={1}>
-              <Box flexDirection="column" paddingLeft={1} flexGrow={1} overflow="hidden">
-                {viewNodes.length === 0 && (
-                  <Text dimColor>No files match current filter.</Text>
-                )}
-                {viewNodes.map((node, idx) => {
-                  const isCursor = scrollOffset + idx === cursor;
-                  const isSel = selected.has(node.path);
-                  const marker = isCursor ? ">" : " ";
-                  const indent = filter.trim() ? 0 : node.depth;
-                  const icon = node.isDirectory
-                    ? expanded.has(node.path)
-                      ? "[-]"
-                      : "[+]"
-                    : isSel
-                    ? "[x]"
-                    : node.isText
-                    ? "[ ]"
-                    : "[!]";
+            <Box flexDirection="row" flexGrow={1} paddingLeft={1}>
+              {visibleNodes.length === 0 ? (
+                <Text dimColor>No files match current filter.</Text>
+              ) : (
+                <ScrollableBox
+                  height={listHeight}
+                  scrollOffset={scrollOffset}
+                  showScrollbar={visibleNodes.length > listHeight}
+                  accentColor="cyan"
+                >
+                  {visibleNodes.map((node, idx) => {
+                    const isCursor = idx === cursor;
+                    const isSel = selected.has(node.path);
+                    const marker = isCursor ? ">" : " ";
+                    const indent = filter.trim() ? 0 : node.depth;
+                    const icon = node.isDirectory
+                      ? expanded.has(node.path)
+                        ? "[-]"
+                        : "[+]"
+                      : isSel
+                      ? "[x]"
+                      : node.isText
+                      ? "[ ]"
+                      : "[!]";
 
-                  let color: any = node.isDirectory
-                    ? "yellow"
-                    : node.isText
-                    ? isSel
-                      ? "green"
-                      : "white"
-                    : "red";
+                    let color: any = node.isDirectory
+                      ? "yellow"
+                      : node.isText
+                      ? isSel
+                        ? "green"
+                        : "white"
+                      : "red";
 
-                  if (isCursor) color = "cyan";
+                    if (isCursor) color = "cyan";
 
-                  return (
-                    <Box key={node.path}>
-                      <Text color={isCursor ? "cyan" : "gray"}>{marker}</Text>
-                      <Text dimColor>{" ".repeat(indent)}</Text>
-                      <Text color={color}>
-                        {icon}{" "}
-                        {node.relPath === "." ? node.name : node.relPath}{" "}
-                        {!node.isDirectory &&
-                          `(${formatBytes(node.sizeBytes)}${
-                            node.isText ? "" : ", binary"
-                          })`}
-                      </Text>
-                    </Box>
-                  );
-                })}
-              </Box>
-              {/* Explorer scrollbar */}
-              {visibleNodes.length > listHeight && (
-                <Box flexDirection="column" width={1}>
-                  <Text color={scrollOffset > 0 ? "cyan" : "gray"}>^</Text>
-                  {Array.from({ length: Math.max(1, listHeight - 2) }).map((_, i) => {
-                    const trackHeight = listHeight - 2;
-                    const thumbSize = Math.max(1, Math.round((listHeight / visibleNodes.length) * trackHeight));
-                    const maxThumbPos = trackHeight - thumbSize;
-                    const scrollRatio = visibleNodes.length > listHeight
-                      ? scrollOffset / (visibleNodes.length - listHeight)
-                      : 0;
-                    const thumbPos = Math.round(scrollRatio * maxThumbPos);
-                    const isThumb = i >= thumbPos && i < thumbPos + thumbSize;
                     return (
-                      <Text key={i} color={isThumb ? "cyan" : "gray"}>
-                        {isThumb ? "#" : "|"}
-                      </Text>
+                      <Box key={node.path}>
+                        <Text color={isCursor ? "cyan" : "gray"}>{marker}</Text>
+                        <Text dimColor>{" ".repeat(indent)}</Text>
+                        <Text color={color}>
+                          {icon}{" "}
+                          {node.relPath === "." ? node.name : node.relPath}{" "}
+                          {!node.isDirectory &&
+                            `(${formatBytes(node.sizeBytes)}${
+                              node.isText ? "" : ", binary"
+                            })`}
+                        </Text>
+                      </Box>
                     );
                   })}
-                  <Text color={scrollOffset + listHeight < visibleNodes.length ? "cyan" : "gray"}>v</Text>
-                </Box>
+                </ScrollableBox>
               )}
             </Box>
           </Box>
@@ -2516,8 +2493,11 @@ const App: React.FC = () => {
         </Box>
       </Box>
 
+      {/* Exit Confirmation Modal */}
+      {confirmExit && <ExitConfirm rows={rows} cols={cols} />}
+
       {/* Help Modal Overlay */}
-      {showHelp && <HelpModal onClose={() => setShowHelp(false)} rows={rows} cols={cols} />}
+      {showHelp && <HelpModal rows={rows} cols={cols} />}
     </Box>
   );
 };
