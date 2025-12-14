@@ -412,6 +412,7 @@ const TEXT_EXTENSIONS = new Set<string>([
   ".md",
   ".mdx",
   ".markdown",
+  ".rst",
   ".txt",
   ".html",
   ".htm",
@@ -525,6 +526,13 @@ const COST_PER_1M_TOKENS = 5.0;
 const MAX_PREVIEW_CHARS = 2000;
 const MAX_READ_BYTES = 5 * 1024 * 1024; // 5MB
 const MAX_INCLUDE_BYTES = 25 * 1024 * 1024; // 25MB safety cap for including a single file
+
+function expandTilde(filepath: string): string {
+  if (filepath.startsWith("~/") || filepath === "~") {
+    return path.join(os.homedir(), filepath.slice(1));
+  }
+  return filepath;
+}
 
 function formatBytes(bytes: number): string {
   if (!Number.isFinite(bytes) || bytes <= 0) return "0 B";
@@ -1392,9 +1400,9 @@ function validatePreset(p: any): p is Preset {
   );
 }
 
-function loadPresets(): Preset[] {
+async function loadPresets(): Promise<Preset[]> {
   try {
-    const raw = fs.readFileSync(PRESET_FILE, "utf8");
+    const raw = await fsp.readFile(PRESET_FILE, "utf8");
     const parsed = JSON.parse(raw);
     let candidates: any[] = [];
     if (Array.isArray(parsed)) {
@@ -1408,9 +1416,9 @@ function loadPresets(): Preset[] {
   }
 }
 
-function savePresets(presets: Preset[]): boolean {
+async function savePresets(presets: Preset[]): Promise<boolean> {
   try {
-    fs.writeFileSync(PRESET_FILE, JSON.stringify(presets, null, 2), "utf8");
+    await fsp.writeFile(PRESET_FILE, JSON.stringify(presets, null, 2), "utf8");
     return true;
   } catch {
     return false;
@@ -1443,6 +1451,7 @@ async function copyToClipboard(text: string): Promise<boolean> {
         ["wl-copy"],
         ["xclip", "-selection", "clipboard"],
         ["xsel", "--clipboard", "--input"],
+        ["clip.exe"],
       ];
 
       for (const cmd of candidates) {
@@ -1596,7 +1605,9 @@ const App: React.FC<AppProps> = ({ initialRootDir }) => {
   const { stdout } = useStdout();
   const { setRawMode, isRawModeSupported } = useStdin();
   const [rootDir, setRootDir] = useState(
-    initialRootDir ? path.resolve(initialRootDir) : path.resolve(process.cwd())
+    initialRootDir
+      ? path.resolve(expandTilde(initialRootDir))
+      : path.resolve(process.cwd())
   );
 
   const [rootNode, setRootNode] = useState<FileNode | null>(null);
@@ -1699,7 +1710,7 @@ const App: React.FC<AppProps> = ({ initialRootDir }) => {
   const handleScan = async (
     dir: string
   ): Promise<{ root: FileNode | null; files: FileNode[] }> => {
-    const resolved = path.resolve(dir);
+    const resolved = path.resolve(expandTilde(dir));
     setRootDir(resolved);
     
     // Increment scan ID to invalidate previous scans
@@ -1771,7 +1782,7 @@ const App: React.FC<AppProps> = ({ initialRootDir }) => {
 
   useEffect(() => {
     (async () => {
-      const loaded = loadPresets();
+      const loaded = await loadPresets();
       setPresets(loaded);
       await handleScan(rootDir);
       setStatus("Ready");
@@ -2178,7 +2189,7 @@ const App: React.FC<AppProps> = ({ initialRootDir }) => {
     );
   };
 
-  const handleSavePreset = () => {
+  const handleSavePreset = async () => {
     const name = presetName.trim();
     if (!name) {
       setStatus("Preset name cannot be empty.");
@@ -2207,7 +2218,7 @@ const App: React.FC<AppProps> = ({ initialRootDir }) => {
       a.name.localeCompare(b.name)
     );
     setPresets(next);
-    if (savePresets(next)) {
+    if (await savePresets(next)) {
       setPresetName("");
       setStatus(`Saved preset "${name}".`);
     } else {
@@ -2260,12 +2271,12 @@ const App: React.FC<AppProps> = ({ initialRootDir }) => {
     }
   };
 
-  const handleDeletePreset = (index: number) => {
+  const handleDeletePreset = async (index: number) => {
     const preset = presets[index];
     if (!preset) return;
     const next = presets.filter((_, i) => i !== index);
     setPresets(next);
-    if (savePresets(next)) {
+    if (await savePresets(next)) {
       setStatus(`Deleted preset "${preset.name}".`);
     } else {
       setStatus(`Deleted preset "${preset.name}" (memory only; save failed).`);
