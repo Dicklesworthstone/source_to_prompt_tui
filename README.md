@@ -1,8 +1,8 @@
 # s2p — Source2Prompt TUI
 
-![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Linux-blue)
+![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Linux%20%7C%20Windows-blue)
 ![Runtime](https://img.shields.io/badge/runtime-Bun%201.3+-purple)
-![Status](https://img.shields.io/badge/status-alpha-orange)
+![Status](https://img.shields.io/badge/status-beta-orange)
 ![License](https://img.shields.io/badge/license-MIT-green)
 
 A world-class terminal UI for combining source code files into LLM-ready prompts. Features a tree explorer with file sizes and line counts, live syntax preview, token estimation, presets, and structured XML-like output — all in a single compiled binary.
@@ -99,9 +99,11 @@ curl -fsSL ... | bash -s -- --dest /usr/local/bin --verify
 # Or with Bun directly (if you have Bun installed)
 bun install -g source2prompt-tui
 
-# Run in any project directory
-cd your-project
+# Run in current directory
 s2p
+
+# Run in a specific project directory
+s2p /path/to/my/project
 ```
 
 The installer automatically:
@@ -115,7 +117,13 @@ The installer automatically:
 
 ## Usage
 
-Launch `s2p` in your project directory. The TUI displays four main areas:
+Launch `s2p` in your project directory (or pass a path).
+
+```bash
+s2p [directory]
+```
+
+The TUI displays four main areas:
 
 | Area | Purpose |
 |------|---------|
@@ -162,8 +170,10 @@ Press `Ctrl+G` to generate the combined prompt and open the Combined Output view
 | Key | Action |
 |-----|--------|
 | `F1` | Show help modal |
+| `?` | Show help modal |
 | `Tab` | Switch between panes |
 | `Ctrl+G` | Generate combined prompt |
+| `z` | Toggle prompt sample collapse |
 | `Esc` | Exit (press twice to confirm) |
 | `Ctrl+C` | Force quit |
 
@@ -187,7 +197,9 @@ Press `Ctrl+G` to generate the combined prompt and open the Combined Output view
 | `9` | Select all Ruby files |
 | `0` | Select all PHP files |
 | `r` | Select all Rust files |
-| `u` | Clear selection for filtered files |
+| `u` | Clear selection for files matching current filter |
+| `a` | Select all files matching current filter |
+| `A` | Deselect all files matching current filter |
 
 ### Config Pane
 | Key | Action |
@@ -195,6 +207,7 @@ Press `Ctrl+G` to generate the combined prompt and open the Combined Output view
 | `←` / `→` | Switch tabs (Inputs/Presets/Options) |
 | `p` | Edit preamble (Inputs tab) |
 | `g` | Edit goal (Inputs tab) |
+| `Ctrl+E` | Edit preamble/goal in `$VISUAL`/`$EDITOR` (multiline) |
 | `i` | Toggle include preamble (Options tab) |
 | `o` | Toggle include goal (Options tab) |
 | `x` | Toggle remove comments (Options tab) |
@@ -208,10 +221,25 @@ Press `Ctrl+G` to generate the combined prompt and open the Combined Output view
 | Key | Action |
 |-----|--------|
 | `j` / `k` | Scroll down/up |
-| `PgDn` / `PgUp` | Scroll by page |
+| `Space` / `b` (or `PgDn` / `PgUp`) | Scroll by page |
 | `y` | Copy to clipboard |
 | `w` | Save to file |
 | `Esc` / `q` | Return to main view |
+
+### Preview Pane (when focused)
+| Key | Action |
+|-----|--------|
+| `j` / `k` | Scroll down/up |
+| `Space` / `b` | Page down/up |
+| `g` / `G` | Jump to top/bottom |
+
+### Prompt Sample Pane
+| Key | Action |
+|-----|--------|
+| `z` | Collapse/expand sample |
+| `j` / `k` | Scroll down/up (when focused) |
+| `Space` / `b` | Page down/up (when focused) |
+| `g` / `G` | Jump to top/bottom (when focused) |
 
 ---
 
@@ -409,7 +437,7 @@ For each entry in directory:
   3. If file:
      a. Get file stats (size)
      b. Determine if text file by extension/name
-     c. If text and < 5MB: read contents, count lines
+     c. If text and <= 5MB: read contents, count lines; otherwise keep as text and lazy-load content when needed
      d. Categorize by file type (JS, Python, etc.)
      e. Add to file tree
 ```
@@ -425,10 +453,10 @@ interface FileNode {
   name: string;        // Filename only
   isDirectory: boolean;
   sizeBytes: number;
-  numLines: number;    // 0 for directories or binary files
+  numLines: number;    // 0 for directories/binary files; -1 when unknown (large text)
   isText: boolean;
   category: FileCategory;  // 'javascript' | 'python' | etc.
-  content: string;     // Cached content for small text files
+  content: string;     // Cached content for small text files (<=5MB); empty for large files
   children?: FileNode[];
 }
 ```
@@ -446,7 +474,7 @@ const stats = {
 };
 ```
 
-Token counting uses tiktoken's `cl100k_base` encoding, the same encoding used by GPT-4. For files without cached content (>5MB), tokens are estimated as `bytes / 4`.
+Token counting uses tiktoken's `cl100k_base` encoding, the same encoding used by GPT-4. When comment stripping/minify are enabled, the live estimate reflects transformed content for small files; files without cached content (large files) fall back to a conservative `bytes / 4` estimate until generation.
 
 ---
 
@@ -550,7 +578,8 @@ Selected files:
 
 s2p is designed to handle large projects efficiently:
 
-- **Lazy content loading**: File contents are only read for files <5MB. Larger files show size but content is loaded on-demand.
+- **Lazy content loading**: File contents are only read during scan for files <=5MB. Larger files show size but content is loaded on-demand.
+- **Large-file support**: Text files over 5MB are still selectable (up to a per-file safety cap); preview shows a head snippet and full reads only happen during generation.
 - **Debounced statistics**: Token counting and stats updates are debounced (200ms) to prevent UI lag during rapid selection changes.
 - **Efficient tree rendering**: Only visible nodes are rendered. Scrolling is virtualized.
 
@@ -569,7 +598,7 @@ A project with 10,000 files uses approximately 5MB of memory for metadata.
 |--------|-------------|---------|
 | Files in project | <50,000 | 100,000+ (slower) |
 | Selected files | <100 | 500+ (larger output) |
-| Individual file size | <1MB | 5MB (hard limit) |
+| Individual file size (included) | <1MB | 25MB per file (safety cap) |
 | Total output size | <500KB | 2MB+ (may exceed context) |
 
 ---
@@ -807,10 +836,10 @@ Options:
 |---------|-------|-----|
 | `command not found: s2p` | Install dir not in PATH | Add `~/.local/bin` to PATH; restart shell |
 | Binary won't start | Wrong architecture | Reinstall; check `uname -m` matches binary |
-| Large file missing | >5MB limit | Intentional; split large files or increase limit in source |
+| Large file can't be included | >25MB per-file safety cap (or binary) | Split the file, or raise the cap in source (`MAX_INCLUDE_BYTES`) |
 | Token count seems off | Encoding differences | Estimation uses cl100k_base; actual varies by model |
 | Minify fails silently | Invalid syntax | Original content used; check for syntax errors |
-| Clipboard fails | Missing utility | Install `xclip` (Linux) or ensure `pbcopy` works (macOS) |
+| Clipboard fails | Missing utility | Install `xclip` (Linux), ensure `pbcopy` (macOS), or `clip.exe` (Windows) |
 | Slow on large projects | Many files | Normal; scanning 10K+ files takes a few seconds |
 | Preset files missing | Project moved | Presets store paths; re-select if structure changed |
 | Raw mode error | Not a TTY | Run in a real terminal, not piped |
