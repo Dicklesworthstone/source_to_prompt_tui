@@ -31,6 +31,19 @@ const jsonInlinePatches = [
   },
 ];
 
+// mdn-data JSON files that need to be copied locally for css-tree
+const mdnDataPatches = [
+  {
+    targetDir: "node_modules/css-tree/lib",
+    files: [
+      { src: "node_modules/mdn-data/css/at-rules.json", dest: "mdn-atrules.json" },
+      { src: "node_modules/mdn-data/css/properties.json", dest: "mdn-properties.json" },
+      { src: "node_modules/mdn-data/css/syntaxes.json", dest: "mdn-syntaxes.json" },
+    ],
+    patchFile: "node_modules/css-tree/lib/data.js",
+  },
+];
+
 // Apply regex patches
 for (const patch of regexPatches) {
   const filePath = path.resolve(patch.file);
@@ -73,4 +86,50 @@ for (const patch of jsonInlinePatches) {
   const newContent = `const patch = ${jsonData};\nexport default patch;`;
   fs.writeFileSync(filePath, newContent);
   console.log(`Patched ${patch.file} (inlined JSON)`);
+}
+
+// Apply mdn-data patches - copy JSON files locally and update imports
+for (const patch of mdnDataPatches) {
+  const patchFilePath = path.resolve(patch.patchFile);
+  const targetDir = path.resolve(patch.targetDir);
+
+  if (!fs.existsSync(patchFilePath)) {
+    console.log(`Skipping mdn-data patch (${patch.patchFile} not found)`);
+    continue;
+  }
+
+  let content = fs.readFileSync(patchFilePath, "utf-8");
+
+  // Check if already patched
+  if (content.includes("from './mdn-atrules.json'")) {
+    console.log(`Already patched ${patch.patchFile} (mdn-data)`);
+    continue;
+  }
+
+  // Copy JSON files to target directory
+  for (const file of patch.files) {
+    const srcPath = path.resolve(file.src);
+    const destPath = path.join(targetDir, file.dest);
+    if (fs.existsSync(srcPath)) {
+      fs.copyFileSync(srcPath, destPath);
+    } else {
+      console.warn(`Warning: ${file.src} not found`);
+    }
+  }
+
+  // Update imports in data.js to use local JSON files with ESM import assertions
+  content = content
+    .replace(
+      "import { createRequire } from 'module';",
+      `import mdnAtrules from './mdn-atrules.json' with { type: 'json' };
+import mdnProperties from './mdn-properties.json' with { type: 'json' };
+import mdnSyntaxes from './mdn-syntaxes.json' with { type: 'json' };`
+    )
+    .replace("const require = createRequire(import.meta.url);", "")
+    .replace("const mdnAtrules = require('mdn-data/css/at-rules.json');", "")
+    .replace("const mdnProperties = require('mdn-data/css/properties.json');", "")
+    .replace("const mdnSyntaxes = require('mdn-data/css/syntaxes.json');", "");
+
+  fs.writeFileSync(patchFilePath, content);
+  console.log(`Patched ${patch.patchFile} (mdn-data JSON imports)`);
 }
