@@ -526,6 +526,7 @@ const COST_PER_1M_TOKENS = 5.0;
 const MAX_PREVIEW_CHARS = 2000;
 const MAX_READ_BYTES = 5 * 1024 * 1024; // 5MB
 const MAX_INCLUDE_BYTES = 25 * 1024 * 1024; // 25MB safety cap for including a single file
+const MAX_SCAN_TOKEN_BYTES = 2 * 1024; // 2KB - files larger than this use byte estimation during scan (js-tiktoken is slow)
 
 function expandTilde(filepath: string): string {
   if (filepath.startsWith("~/") || filepath === "~") {
@@ -759,7 +760,13 @@ async function scanProject(
             try {
               content = await fsp.readFile(absPath, "utf8");
               numLines = content.length === 0 ? 0 : content.split(/\r?\n/).length;
-              tokens = countTokens(content);
+              // Use byte estimation for larger files during scan (js-tiktoken is slow on large files)
+              if (sizeBytes <= MAX_SCAN_TOKEN_BYTES) {
+                tokens = countTokens(content);
+              } else {
+                // Byte-based estimation: ~4 bytes per token
+                tokens = Math.ceil(sizeBytes / 4);
+              }
             } catch {
               isText = false;
               content = "";
