@@ -10,7 +10,7 @@ A world-class terminal UI for combining source code files into LLM-ready prompts
 <div align="center">
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/Dicklesworthstone/source_to_prompt_tui/main/install.sh | bash
+curl -fsSL "https://raw.githubusercontent.com/Dicklesworthstone/source_to_prompt_tui/main/install.sh?$(date +%s)" | bash
 ```
 
 </div>
@@ -91,7 +91,7 @@ s2p solves all of these problems:
 
 ```bash
 # Install via one-liner (recommended; macOS/Linux and Windows via Git Bash/WSL)
-curl -fsSL https://raw.githubusercontent.com/Dicklesworthstone/source_to_prompt_tui/main/install.sh | bash
+curl -fsSL "https://raw.githubusercontent.com/Dicklesworthstone/source_to_prompt_tui/main/install.sh?$(date +%s)" | bash
 
 # Windows (PowerShell)
 powershell -NoProfile -ExecutionPolicy Bypass -Command "iwr -useb https://raw.githubusercontent.com/Dicklesworthstone/source_to_prompt_tui/main/install.ps1 | iex"
