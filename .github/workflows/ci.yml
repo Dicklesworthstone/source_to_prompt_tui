@@ -2,31 +2,103 @@ name: CI
 
 on:
   push:
+    branches: [main, master]
+    tags: ["v*"]
   pull_request:
+    branches: [main, master]
   workflow_dispatch:
-  release:
-    types: [published]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 env:
   BUN_VERSION: "1.3.3"
 
-permissions:
-  contents: write
-
 jobs:
   check:
+    name: Typecheck
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
-      - uses: actions/checkout@v4
-      - uses: oven-sh/setup-bun@v1
+      - name: Checkout repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@8f24390df009a496891208e5e60b1a9c1f8a4e64 # v2.0.1
         with:
           bun-version: ${{ env.BUN_VERSION }}
+
+      - name: Cache Bun dependencies
+        uses: actions/cache@1bd1e32a3bdc45362d1e726936510720a7c30a57 # v4.2.0
+        with:
+          path: |
+            ~/.bun/install/cache
+            node_modules
+          key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-bun-
+
       - name: Install dependencies
         run: bun install --frozen-lockfile
+
       - name: Typecheck
         run: bun run typecheck
 
+  build-test:
+    name: Build Test (${{ matrix.os }})
+    needs: check
+    if: github.event_name == 'pull_request' || (github.event_name == 'push' && !startsWith(github.ref, 'refs/tags/'))
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            build_cmd: bun run build:linux-x64
+            binary: dist/s2p-linux-x64
+          - os: macos-latest
+            build_cmd: bun run build:mac-arm64
+            binary: dist/s2p-macos-arm64
+    runs-on: ${{ matrix.os }}
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@8f24390df009a496891208e5e60b1a9c1f8a4e64 # v2.0.1
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+
+      - name: Cache Bun dependencies
+        uses: actions/cache@1bd1e32a3bdc45362d1e726936510720a7c30a57 # v4.2.0
+        with:
+          path: |
+            ~/.bun/install/cache
+            node_modules
+          key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-bun-
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Build test binary
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          ${{ matrix.build_cmd }}
+
+      - name: Verify binary
+        run: |
+          set -euo pipefail
+          ${{ matrix.binary }} --help >/dev/null
+          echo "Binary verification passed"
+
   build-release:
+    name: Build Release (${{ matrix.os }})
     needs: check
     if: startsWith(github.ref, 'refs/tags/v')
     strategy:
@@ -50,32 +122,51 @@ jobs:
               dist/s2p-macos-arm64
               dist/s2p-macos-x64
     runs-on: ${{ matrix.os }}
+    permissions:
+      contents: read
     steps:
-      - uses: actions/checkout@v4
-      - uses: oven-sh/setup-bun@v1
+      - name: Checkout repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@8f24390df009a496891208e5e60b1a9c1f8a4e64 # v2.0.1
         with:
           bun-version: ${{ env.BUN_VERSION }}
+
+      - name: Cache Bun dependencies
+        uses: actions/cache@1bd1e32a3bdc45362d1e726936510720a7c30a57 # v4.2.0
+        with:
+          path: |
+            ~/.bun/install/cache
+            node_modules
+          key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-bun-
+
       - name: Install dependencies
         run: bun install --frozen-lockfile
-        shell: bash
+
       - name: Build binaries
         run: |
           set -euo pipefail
           mkdir -p dist
           ${{ matrix.build }}
         shell: bash
+
       - name: Test built binaries
         run: |
-          # Test that at least one binary runs with --help (since this is a TUI, we test basic invocation)
+          set -euo pipefail
           if [[ "$RUNNER_OS" == "Linux" ]]; then
             ./dist/s2p-linux-x64 --help >/dev/null
             file ./dist/s2p-windows-x64.exe | grep -qi 'PE32'
           elif [[ "$RUNNER_OS" == "macOS" ]]; then
             ./dist/s2p-macos-arm64 --help >/dev/null || ./dist/s2p-macos-x64 --help >/dev/null
           fi
+          echo "Binary verification passed"
         shell: bash
+
       - name: Upload artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@65c4c4a1ddee5b72f698fdd19549f0f0fb45cf08 # v4.6.0
         with:
           name: s2p-${{ matrix.os }}
           path: ${{ matrix.artifacts }}
@@ -83,15 +174,20 @@ jobs:
           retention-days: 7
 
   release:
+    name: Publish Release
     needs: build-release
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
-      - uses: actions/download-artifact@v4
+      - name: Download all artifacts
+        uses: actions/download-artifact@fa0a91b85d4f404e444e00e005971372dc801d16 # v4.1.8
         with:
           pattern: s2p-*
           merge-multiple: true
           path: dist
+
       - name: Generate checksums
         run: |
           set -euo pipefail
@@ -103,12 +199,18 @@ jobs:
             [[ "$f" == "sha256.txt" ]] && continue
             binaries+=("$f")
           done
+          if [[ ${#binaries[@]} -eq 0 ]]; then
+            echo "Error: No binaries found to checksum"
+            exit 1
+          fi
           for f in "${binaries[@]}"; do
             shasum -a 256 "$f" > "${f}.sha256"
           done
           shasum -a 256 "${binaries[@]}" > sha256.txt
+          echo "Generated checksums for ${#binaries[@]} binaries"
+
       - name: Publish release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@01570a1f39cb168c169c802c3bceb9e93fb10974 # v2.1.0
         with:
           files: |
             dist/s2p-linux-x64
@@ -119,3 +221,4 @@ jobs:
             dist/s2p-*.sha256
             dist/sha256.txt
           generate_release_notes: true
+          fail_on_unmatched_files: true
