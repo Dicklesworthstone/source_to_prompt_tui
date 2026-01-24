@@ -26,7 +26,7 @@ jobs:
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
       - name: Setup Bun
-        uses: oven-sh/setup-bun@8f24390df009a496891208e5e60b1a9c1f8a4e64 # v2.0.1
+        uses: oven-sh/setup-bun@3d267786b128fe76c2f16a390aa2448b815359f3 # v2.1.2
         with:
           bun-version: ${{ env.BUN_VERSION }}
 
@@ -68,7 +68,7 @@ jobs:
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
       - name: Setup Bun
-        uses: oven-sh/setup-bun@8f24390df009a496891208e5e60b1a9c1f8a4e64 # v2.0.1
+        uses: oven-sh/setup-bun@3d267786b128fe76c2f16a390aa2448b815359f3 # v2.1.2
         with:
           bun-version: ${{ env.BUN_VERSION }}
 
@@ -129,7 +129,7 @@ jobs:
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
       - name: Setup Bun
-        uses: oven-sh/setup-bun@8f24390df009a496891208e5e60b1a9c1f8a4e64 # v2.0.1
+        uses: oven-sh/setup-bun@3d267786b128fe76c2f16a390aa2448b815359f3 # v2.1.2
         with:
           bun-version: ${{ env.BUN_VERSION }}
 
