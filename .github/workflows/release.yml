@@ -59,6 +59,34 @@ jobs:
         # package.json, which writes to dist/<asset>.
         run: bun run build:${{ matrix.target }}
 
+      - name: Smoke test compiled binary (Unix)
+        if: runner.os != 'Windows'
+        shell: bash
+        # Exercise the COMPILED artifact itself (not `bun run`), because a
+        # runtime asset that Bun's bundler fails to trace — e.g.
+        # mdn-data/css/*.json, pulled in transitively via csso -> css-tree and
+        # loaded at module init — only surfaces when the standalone binary
+        # starts. Without this gate a binary that crashes at launch ("Cannot
+        # find module 'mdn-data/css/at-rules.json'") ships silently (issue #5).
+        # Each matrix runner compiles a binary native to its own host, so the
+        # artifact is directly executable here.
+        run: |
+          set -euo pipefail
+          chmod +x "dist/${{ matrix.asset }}"
+          "./dist/${{ matrix.asset }}" --help </dev/null >/dev/null
+          echo "Smoke test passed: dist/${{ matrix.asset }} starts cleanly."
+
+      - name: Smoke test compiled binary (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          & "dist/${{ matrix.asset }}" --help *> $null
+          if ($LASTEXITCODE -ne 0) {
+            Write-Error "Compiled binary failed to start (exit $LASTEXITCODE)"
+            exit 1
+          }
+          Write-Host "Smoke test passed: dist/${{ matrix.asset }} starts cleanly."
+
       - name: Compute SHA256 (Unix)
         if: runner.os != 'Windows'
         run: |
