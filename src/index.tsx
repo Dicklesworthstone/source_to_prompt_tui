@@ -16,6 +16,10 @@ import { minify as terserMinify } from "terser";
 import * as csso from "csso";
 import { minify as htmlMinify } from "html-minifier-terser";
 import { encoding_for_model, get_encoding, Tiktoken } from "tiktoken";
+// Static default import so Bun's --compile bundler traces it into the binary.
+// A dynamic require('../package.json') would be dropped from the standalone
+// build (the same failure class that removed cfonts/BigText — see above).
+import pkg from "../package.json";
 
 declare const Bun: any;
 
@@ -3457,6 +3461,11 @@ const App: React.FC<AppProps> = ({ initialRootDir }) => {
 
 const args = process.argv.slice(2);
 
+if (args.includes("--version") || args.includes("-V")) {
+  console.log(pkg.version);
+  process.exit(0);
+}
+
 if (args.includes("--help") || args.includes("-h")) {
   console.log(`
 source2prompt-tui (s2p) - A TUI for combining source code into LLM prompts.
@@ -3465,7 +3474,8 @@ Usage:
   s2p [directory]
 
 Options:
-  -h, --help    Show this help message
+  -h, --help       Show this help message
+  -V, --version    Show version and exit
 
 Controls:
   Explorer:     j/k (move), h/l (collapse/expand), Space (select)

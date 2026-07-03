@@ -9,9 +9,14 @@ Repository: <https://github.com/Dicklesworthstone/source_to_prompt_tui>
 
 ---
 
-## [Unreleased] (after v0.3.2)
+## [0.3.3] - 2026-07-02
 
-Commits on `main` since the v0.3.2 tag (2025-12-07). No new GitHub Release has been cut for these changes yet.
+First GitHub Release since v0.3.2 (2025-12-07): ships the accumulated `main` fixes below, the most important of which makes the published binary actually start.
+
+### CLI -- `--version` / `-V` and a stronger release smoke test
+
+- **Add a `--version` / `-V` flag** -- Previously only `--help`/`-h` short-circuited before the Ink TUI mounted; `--version` fell through and tried to launch the TUI, which fails outside a real terminal (`Raw mode is not supported on the current process.stdin`). The reporter of [#5](https://github.com/Dicklesworthstone/source_to_prompt_tui/issues/5) invoked `s2p --version` specifically. It now prints the version (sourced from a **static** `package.json` import so Bun's `--compile` bundler traces it — a dynamic `require` would be dropped, the same failure class as the mdn-data crash) and exits 0.
+- **Release smoke test now runs `--version` too** (not just `--help`) against the compiled artifact on every platform, so a future regression where either flag stops short-circuiting fails CI before publish.
 
 ### Binary Compilation -- mdn-data Crash Fix
 

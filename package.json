@@ -1,6 +1,6 @@
 {
   "name": "source2prompt-tui",
-  "version": "0.3.2",
+  "version": "0.3.3",
   "description": "World-class TUI for combining source code files into LLM-ready prompts (Bun + TypeScript + Ink).",
   "license": "MIT",
   "type": "module",

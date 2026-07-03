@@ -73,6 +73,10 @@ jobs:
         run: |
           set -euo pipefail
           chmod +x "dist/${{ matrix.asset }}"
+          # Both flags must short-circuit BEFORE the Ink TUI mounts (which needs a
+          # TTY / raw mode). --version in particular was unhandled and fell through
+          # to launching the TUI (issue #5 reporter invoked `s2p --version`).
+          "./dist/${{ matrix.asset }}" --version </dev/null >/dev/null
           "./dist/${{ matrix.asset }}" --help </dev/null >/dev/null
           echo "Smoke test passed: dist/${{ matrix.asset }} starts cleanly."
 
@@ -80,6 +84,11 @@ jobs:
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
+          & "dist/${{ matrix.asset }}" --version *> $null
+          if ($LASTEXITCODE -ne 0) {
+            Write-Error "Compiled binary failed --version (exit $LASTEXITCODE)"
+            exit 1
+          }
           & "dist/${{ matrix.asset }}" --help *> $null
           if ($LASTEXITCODE -ne 0) {
             Write-Error "Compiled binary failed to start (exit $LASTEXITCODE)"
