@@ -9,6 +9,15 @@ Repository: <https://github.com/Dicklesworthstone/source_to_prompt_tui>
 
 ---
 
+## [0.3.4] - 2026-07-03
+
+Completes the "make the published binary actually start" work from 0.3.3. The 0.3.3 binary still crashed on launch for real end users with `error: Missing tiktoken_bg.wasm` — the same class of bug as the mdn-data crash, just a second un-embedded asset.
+
+### Fixed -- compiled binary crashed on startup: `Missing tiktoken_bg.wasm`
+
+- **Inline `tiktoken_bg.wasm` (5.3 MB) as base64 in `tiktoken.cjs`** via the existing `scripts/patch-modules.js` postinstall patcher. `tiktoken`'s Node entry loads its WebAssembly module with `fs.readFileSync(__dirname + "/tiktoken_bg.wasm")` at module-load time. In a `bun build --compile` single-file binary `__dirname` is `/$bunfs/root`, the sibling `.wasm` is never embedded, and the read throws before `main()` ever runs — so every command (including `--version`) died at import. The bytes are now decoded from an inline base64 constant with `Buffer.from(...,"base64")` → `new WebAssembly.Module(bytes)`, so tokenization works with zero filesystem dependency, identically on every cross-compiled target.
+- **Why 0.3.3's smoke test missed it (false green):** `tiktoken.cjs` also walks *up* the directory tree looking for `node_modules/tiktoken/tiktoken_bg.wasm`. In CI (and any checkout) that file exists on disk next to the binary, so `s2p --version` succeeded there while failing for a user who has only the standalone binary. The startup crash is therefore only reproducible from a directory with no `node_modules` ancestor — verified fixed by running the new binary from a clean `/tmp` dir.
+
 ## [0.3.3] - 2026-07-02
 
 First GitHub Release since v0.3.2 (2025-12-07): ships the accumulated `main` fixes below, the most important of which makes the published binary actually start.

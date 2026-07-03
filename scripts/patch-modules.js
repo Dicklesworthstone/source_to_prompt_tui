@@ -202,3 +202,76 @@ for (const patch of jsonInlinePatches) {
     }
   }
 }
+
+// Patch tiktoken/tiktoken.cjs to inline tiktoken_bg.wasm as base64 instead of
+// reading it from disk via fs.readFileSync(__dirname + "/tiktoken_bg.wasm").
+// In a `bun build --compile` single-file binary, __dirname resolves to
+// /$bunfs/root and the sibling .wasm is never embedded, so tiktoken throws
+// "Missing tiktoken_bg.wasm" at load time and the binary crashes on startup
+// (issue #5 was the same class of bug for mdn-data). Inlining the bytes makes
+// tokenization work with zero filesystem dependency, identically on every
+// cross-compiled target.
+{
+  const tkFile = path.resolve("node_modules/tiktoken/tiktoken.cjs");
+  const wasmPath = path.resolve("node_modules/tiktoken/tiktoken_bg.wasm");
+  const MARKER = "/* tiktoken_bg.wasm inlined by patch-modules.js */";
+
+  if (!fs.existsSync(tkFile)) {
+    console.log("Skipping node_modules/tiktoken/tiktoken.cjs (not found)");
+  } else {
+    const content = fs.readFileSync(tkFile, "utf-8");
+    if (content.includes(MARKER)) {
+      console.log("Already patched node_modules/tiktoken/tiktoken.cjs");
+    } else if (!fs.existsSync(wasmPath)) {
+      console.warn(
+        "Warning: node_modules/tiktoken/tiktoken_bg.wasm not found, skipping tiktoken patch"
+      );
+    } else {
+      // Replace the disk-reading block spanning:
+      //   const path = require("path");   ...through...
+      //   if (bytes == null) throw new Error("Missing tiktoken_bg.wasm");
+      // with an inline base64 decode. The lines before it (require of
+      // tiktoken_bg.cjs + imports setup) and after it (WebAssembly.Module /
+      // Instance + exports) are preserved. `fs`/`path` are only used by the
+      // removed block, so dropping their requires is safe.
+      const startAnchor = 'const path = require("path");';
+      const endAnchor =
+        'if (bytes == null) throw new Error("Missing tiktoken_bg.wasm");';
+      const startIdx = content.indexOf(startAnchor);
+      const endIdx = content.indexOf(endAnchor);
+      if (startIdx === -1 || endIdx === -1 || endIdx < startIdx) {
+        console.warn(
+          "Warning: node_modules/tiktoken/tiktoken.cjs does not match expected " +
+            "wasm-loading layout. Upstream tiktoken may have changed; skipping inline patch."
+        );
+      } else {
+        const b64 = fs.readFileSync(wasmPath).toString("base64");
+        const before = content.slice(0, startIdx);
+        const after = content.slice(endIdx + endAnchor.length);
+        const inlined = `${MARKER}\nconst bytes = Buffer.from("${b64}", "base64");`;
+        const newContent = before + inlined + after;
+        // Sanity: the filesystem read must be gone and the module must still
+        // build the WebAssembly module from `bytes`.
+        if (
+          newContent.includes("fs.readFileSync") ||
+          newContent.includes("Missing tiktoken_bg.wasm") ||
+          !newContent.includes("new WebAssembly.Module(bytes)")
+        ) {
+          console.warn(
+            "Warning: tiktoken.cjs patch produced unexpected output " +
+              "(residual fs read or missing WebAssembly.Module). Aborting write."
+          );
+        } else {
+          fs.writeFileSync(tkFile, newContent);
+          console.log(
+            `Patched node_modules/tiktoken/tiktoken.cjs (inlined ${(
+              b64.length /
+              1024 /
+              1024
+            ).toFixed(1)}MB base64 wasm)`
+          );
+        }
+      }
+    }
+  }
+}
