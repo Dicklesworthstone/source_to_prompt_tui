@@ -138,21 +138,25 @@ for (const patch of jsonInlinePatches) {
             // not silently corrupt the file by inlining JSON alongside mismatched lines.
             const nextLine1 = lines[i + 1] || "";
             const nextLine2 = lines[i + 2] || "";
-            const match1 = nextLine1.includes("const mdnProperties = require('mdn-data/css/properties.json');");
-            const match2 = nextLine2.includes("const mdnSyntaxes = require('mdn-data/css/syntaxes.json');");
+            const match1 = nextLine1.includes(
+              "const mdnProperties = require('mdn-data/css/properties.json');",
+            );
+            const match2 = nextLine2.includes(
+              "const mdnSyntaxes = require('mdn-data/css/syntaxes.json');",
+            );
             if (!match1 || !match2) {
               if (!match1) {
                 console.warn(
                   `Warning: ${mdnDataPatch.file} line ${i + 2} does not match expected mdnProperties require().\n` +
-                  `  Expected: const mdnProperties = require('mdn-data/css/properties.json');\n` +
-                  `  Got:      ${nextLine1.trim()}`
+                    `  Expected: const mdnProperties = require('mdn-data/css/properties.json');\n` +
+                    `  Got:      ${nextLine1.trim()}`,
                 );
               }
               if (!match2) {
                 console.warn(
                   `Warning: ${mdnDataPatch.file} line ${i + 3} does not match expected mdnSyntaxes require().\n` +
-                  `  Expected: const mdnSyntaxes = require('mdn-data/css/syntaxes.json');\n` +
-                  `  Got:      ${nextLine2.trim()}`
+                    `  Expected: const mdnSyntaxes = require('mdn-data/css/syntaxes.json');\n` +
+                    `  Got:      ${nextLine2.trim()}`,
                 );
               }
               console.warn(`Aborting mdn-data JSON inlining — pushing original line unchanged.`);
@@ -186,12 +190,12 @@ for (const patch of jsonInlinePatches) {
           if (missingVars.length > 0) {
             console.warn(
               `Warning: ${mdnDataPatch.file} patched output is missing inlined data for: ${missingVars.join(", ")}. ` +
-              `The require() lines were removed but JSON was not inlined. Aborting write.`
+                `The require() lines were removed but JSON was not inlined. Aborting write.`,
             );
           } else if (newContent.includes("require('mdn-data")) {
             console.warn(
               `Warning: ${mdnDataPatch.file} patched output still contains mdn-data require() calls. ` +
-              `Upstream file may have changed. Aborting write.`
+                `Upstream file may have changed. Aborting write.`,
             );
           } else {
             fs.writeFileSync(filePath, newContent);
@@ -224,7 +228,7 @@ for (const patch of jsonInlinePatches) {
       console.log("Already patched node_modules/tiktoken/tiktoken.cjs");
     } else if (!fs.existsSync(wasmPath)) {
       console.warn(
-        "Warning: node_modules/tiktoken/tiktoken_bg.wasm not found, skipping tiktoken patch"
+        "Warning: node_modules/tiktoken/tiktoken_bg.wasm not found, skipping tiktoken patch",
       );
     } else {
       // Replace the disk-reading block spanning:
@@ -235,14 +239,13 @@ for (const patch of jsonInlinePatches) {
       // Instance + exports) are preserved. `fs`/`path` are only used by the
       // removed block, so dropping their requires is safe.
       const startAnchor = 'const path = require("path");';
-      const endAnchor =
-        'if (bytes == null) throw new Error("Missing tiktoken_bg.wasm");';
+      const endAnchor = 'if (bytes == null) throw new Error("Missing tiktoken_bg.wasm");';
       const startIdx = content.indexOf(startAnchor);
       const endIdx = content.indexOf(endAnchor);
       if (startIdx === -1 || endIdx === -1 || endIdx < startIdx) {
         console.warn(
           "Warning: node_modules/tiktoken/tiktoken.cjs does not match expected " +
-            "wasm-loading layout. Upstream tiktoken may have changed; skipping inline patch."
+            "wasm-loading layout. Upstream tiktoken may have changed; skipping inline patch.",
         );
       } else {
         const b64 = fs.readFileSync(wasmPath).toString("base64");
@@ -259,16 +262,14 @@ for (const patch of jsonInlinePatches) {
         ) {
           console.warn(
             "Warning: tiktoken.cjs patch produced unexpected output " +
-              "(residual fs read or missing WebAssembly.Module). Aborting write."
+              "(residual fs read or missing WebAssembly.Module). Aborting write.",
           );
         } else {
           fs.writeFileSync(tkFile, newContent);
           console.log(
             `Patched node_modules/tiktoken/tiktoken.cjs (inlined ${(
-              b64.length /
-              1024 /
-              1024
-            ).toFixed(1)}MB base64 wasm)`
+              b64.length / 1024 / 1024
+            ).toFixed(1)}MB base64 wasm)`,
           );
         }
       }

@@ -567,7 +567,7 @@
                         pattern = pattern.replace(/^\/+/, '');
         
                         // Convert glob patterns to RegExp
-                        let regexPattern = pattern
+                        const regexPattern = pattern
                             .replace(/\./g, '\\.')
                             .replace(/\*\*/g, '{{GLOBSTAR}}') // Temporarily replace ** 
                             .replace(/\*/g, '[^/]*')  // Single * matches anything except /
@@ -576,7 +576,7 @@
                             .replace(/\/$/, ''); // Remove trailing slash again just in case
         
                         // Create the complete regex pattern
-                        let fullPattern = isAbsolute ? 
+                        const fullPattern = isAbsolute ? 
                             `^${regexPattern}(?:$|/)` : 
                             `(?:^|/)${regexPattern}(?:$|/)`;
         
@@ -704,7 +704,7 @@
         let folderHandle = null;
         let ignoreFilter = null;
         let pathToElement = {};
-        let filterSelectedPaths = new Set();
+        const filterSelectedPaths = new Set();
 
         function showGlobalMessage(message, type = 'error') {
             const messageDiv = document.getElementById('globalMessage');
@@ -964,7 +964,7 @@
             }
             const checkboxes = fileTree.querySelectorAll('input[type="checkbox"][data-type="file"]');
             checkboxes.forEach(cb => cb.checked = false);
-            let missing = [];
+            const missing = [];
             preset.files.forEach(p => {
                 const cb = Array.from(checkboxes).find(c => c.dataset.path === p);
                 if (cb) {
@@ -1183,7 +1183,7 @@
 
         function removeCommentsFromCode(path, content) {
             const ext = path.toLowerCase();
-            let lines = content.split('\n');
+            const lines = content.split('\n');
             let result = lines.join('\n');
             // Heuristics:
             // JS/TS/TSX/JSX/C/C++/Java/Go/Rust/PHP/Ruby: remove // and /* */ style comments
@@ -1218,7 +1218,7 @@
                 // Already handled above with JS pattern
             }
             // Trim trailing spaces from lines after removal
-            let processedLines = result.split('\n').map(l => l.trimEnd());
+            const processedLines = result.split('\n').map(l => l.trimEnd());
             // Remove empty lines that may be left by comment removal
             return processedLines.join('\n');
         }
@@ -1268,8 +1268,8 @@
                 let combinedContent = '';
                 let afterCommentTotalSize = 0;
                 let afterCommentTotalLines = 0;
-                let afterMinifyTotalSize = 0;
-                let afterMinifyTotalLines = 0;
+                const afterMinifyTotalSize = 0;
+                const afterMinifyTotalLines = 0;
 
                 // Remove comments first if checked
                 for (const f of selectedFiles) {
@@ -1293,9 +1293,9 @@
 
                 // Then minify if checked
                 if (minifyOutput.checked) {
-                    let tempFiles = [];
+                    const tempFiles = [];
                     for (const f of intermediateFiles) {
-                        let minContent = await minifyContent(f.path, f.content);
+                        const minContent = await minifyContent(f.path, f.content);
                         tempFiles.push({ path: f.path, content: minContent });
                     }
                     intermediateFiles = tempFiles;
@@ -1481,7 +1481,7 @@
             }
             const matchedPaths = Object.keys(pathToElement).filter(p => p.toLowerCase().includes(query));
             matchedPaths.forEach(p => {
-                let parts = p.split('/');
+                const parts = p.split('/');
                 let currentPath = '';
                 for (let i = 0; i < parts.length; i++) {
                     currentPath = i === 0 ? parts[i] : currentPath + '/' + parts[i];

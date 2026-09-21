@@ -1,21 +1,21 @@
 #!/usr/bin/env bun
-import React, { useEffect, useMemo, useRef, useState } from "react";
-import { render, Box, Text, useInput, useApp, useStdout, useStdin } from "ink";
-import TextInput from "ink-text-input";
-import Spinner from "ink-spinner";
-import Gradient from "ink-gradient";
-// BigText removed - cfonts breaks bun compile (runtime require of package.json)
-import SyntaxHighlight from "ink-syntax-highlight";
 import { spawnSync } from "node:child_process";
-import fs from "node:fs";
+import type fs from "node:fs";
 import fsp from "node:fs/promises";
-import path from "node:path";
 import os from "node:os";
-import ignore, { Ignore } from "ignore";
-import { minify as terserMinify } from "terser";
+import path from "node:path";
 import * as csso from "csso";
 import { minify as htmlMinify } from "html-minifier-terser";
-import { encoding_for_model, get_encoding, Tiktoken } from "tiktoken";
+import ignore, { type Ignore } from "ignore";
+import { Box, render, Text, useApp, useInput, useStdin, useStdout } from "ink";
+import Gradient from "ink-gradient";
+import Spinner from "ink-spinner";
+// BigText removed - cfonts breaks bun compile (runtime require of package.json)
+import SyntaxHighlight from "ink-syntax-highlight";
+import TextInput from "ink-text-input";
+import React, { useEffect, useMemo, useRef, useState } from "react";
+import { minify as terserMinify } from "terser";
+import { encoding_for_model, get_encoding, type Tiktoken } from "tiktoken";
 // Static default import so Bun's --compile bundler traces it into the binary.
 // A dynamic require('../package.json') would be dropped from the standalone
 // build (the same failure class that removed cfonts/BigText — see above).
@@ -33,7 +33,7 @@ async function acquireOp(): Promise<void> {
     activeOps++;
     return;
   }
-  return new Promise<void>(resolve => opQueue.push(resolve));
+  return new Promise<void>((resolve) => opQueue.push(resolve));
 }
 
 function releaseOp(): void {
@@ -92,10 +92,10 @@ const ScrollableBox: React.FC<ScrollableBoxProps> = ({
   scrollOffset,
   showScrollbar = true,
   accentColor = "cyan",
-  totalItems: explicitTotal
+  totalItems: explicitTotal,
 }) => {
   const childArray = React.Children.toArray(children);
-  
+
   let totalItems: number;
   let visibleChildren: React.ReactNode[];
 
@@ -111,13 +111,10 @@ const ScrollableBox: React.FC<ScrollableBoxProps> = ({
 
   // Calculate scrollbar metrics (only used when scrollbar is shown)
   const trackHeight = Math.max(1, height - 2); // -2 for up/down arrows
-  const thumbSize = totalItems > 0
-    ? Math.max(1, Math.round((height / totalItems) * trackHeight))
-    : 1;
+  const thumbSize =
+    totalItems > 0 ? Math.max(1, Math.round((height / totalItems) * trackHeight)) : 1;
   const maxThumbPos = Math.max(0, trackHeight - thumbSize);
-  const scrollRatio = totalItems > height
-    ? scrollOffset / (totalItems - height)
-    : 0;
+  const scrollRatio = totalItems > height ? scrollOffset / (totalItems - height) : 0;
   const thumbPos = Math.round(scrollRatio * maxThumbPos);
 
   const canScrollUp = scrollOffset > 0;
@@ -176,12 +173,16 @@ const ExitConfirm: React.FC<ExitConfirmProps> = ({ rows, cols }) => {
         justifyContent="center"
       >
         <Box marginBottom={1}>
-          <Text bold color="yellow">Exit Confirmation</Text>
+          <Text bold color="yellow">
+            Exit Confirmation
+          </Text>
         </Box>
         <Text>Are you sure you want to quit?</Text>
         <Box marginTop={1}>
           <Text dimColor>Press </Text>
-          <Text bold color="red">Esc</Text>
+          <Text bold color="red">
+            Esc
+          </Text>
           <Text dimColor> to quit, any other key to cancel</Text>
         </Box>
       </Box>
@@ -217,57 +218,73 @@ const HelpModal: React.FC<HelpModalProps> = ({ rows, cols }) => {
         padding={1}
       >
         <Box justifyContent="center" marginBottom={1}>
-          <Text bold color="cyan">Help - Keyboard Shortcuts</Text>
+          <Text bold color="cyan">
+            Help - Keyboard Shortcuts
+          </Text>
         </Box>
 
         <Box flexDirection="row" justifyContent="space-between">
           <Box flexDirection="column" width="48%">
-            <Text bold color="yellow">Global</Text>
-            <Text>  F1 / ?     Show this help</Text>
-            <Text>  Esc        Exit (press twice to quit)</Text>
-            <Text>  Ctrl+C     Force quit</Text>
-            <Text>  Ctrl+G     Generate combined prompt</Text>
-            <Text>  Tab        Switch panes</Text>
+            <Text bold color="yellow">
+              Global
+            </Text>
+            <Text> F1 / ? Show this help</Text>
+            <Text> Esc Exit (press twice to quit)</Text>
+            <Text> Ctrl+C Force quit</Text>
+            <Text> Ctrl+G Generate combined prompt</Text>
+            <Text> Tab Switch panes</Text>
             <Text></Text>
-            <Text bold color="yellow">Explorer Pane</Text>
-            <Text>  j/k        Move cursor down/up</Text>
-            <Text>  h/l        Collapse/expand directory</Text>
-            <Text>  Space      Toggle file selection</Text>
-            <Text>  Enter      Toggle select/expand</Text>
-            <Text>  / or f     Filter files</Text>
-            <Text>  d          Change root directory</Text>
-            <Text>  u          Clear filtered selection</Text>
-            <Text>  a/A        Select/deselect all filtered</Text>
+            <Text bold color="yellow">
+              Explorer Pane
+            </Text>
+            <Text> j/k Move cursor down/up</Text>
+            <Text> h/l Collapse/expand directory</Text>
+            <Text> Space Toggle file selection</Text>
+            <Text> Enter Toggle select/expand</Text>
+            <Text> / or f Filter files</Text>
+            <Text> d Change root directory</Text>
+            <Text> u Clear filtered selection</Text>
+            <Text> a/A Select/deselect all filtered</Text>
           </Box>
 
           <Box flexDirection="column" width="48%">
-            <Text bold color="yellow">Quick Select (Explorer)</Text>
-            <Text>  t          All text files</Text>
-            <Text>  1-9,0,r    JS/React/TS/JSON/MD/...</Text>
+            <Text bold color="yellow">
+              Quick Select (Explorer)
+            </Text>
+            <Text> t All text files</Text>
+            <Text> 1-9,0,r JS/React/TS/JSON/MD/...</Text>
             <Text></Text>
-            <Text bold color="yellow">Config Pane</Text>
-            <Text>  Left/Right Switch tabs</Text>
-            <Text>  p/g        Focus preamble/goal</Text>
-            <Text>  Ctrl+E     Edit in $EDITOR (multiline)</Text>
-            <Text>  i/o        Toggle preamble/goal</Text>
-            <Text>  x/m        Toggle comments/minify</Text>
-            <Text>  s/l/d      Save/load/delete preset</Text>
+            <Text bold color="yellow">
+              Config Pane
+            </Text>
+            <Text> Left/Right Switch tabs</Text>
+            <Text> p/g Focus preamble/goal</Text>
+            <Text> Ctrl+E Edit in $EDITOR (multiline)</Text>
+            <Text> i/o Toggle preamble/goal</Text>
+            <Text> x/m Toggle comments/minify</Text>
+            <Text> s/l/d Save/load/delete preset</Text>
             <Text></Text>
-            <Text bold color="yellow">Preview Pane</Text>
-            <Text>  j/k        Scroll preview</Text>
-            <Text>  b/Space    Page up/down</Text>
-            <Text>  g/G        Top/bottom</Text>
+            <Text bold color="yellow">
+              Preview Pane
+            </Text>
+            <Text> j/k Scroll preview</Text>
+            <Text> b/Space Page up/down</Text>
+            <Text> g/G Top/bottom</Text>
             <Text></Text>
-            <Text bold color="yellow">Prompt Sample</Text>
-            <Text>  z          Collapse/expand</Text>
-            <Text>  j/k        Scroll (when focused)</Text>
-            <Text>  b/Space    Page up/down</Text>
-            <Text>  g/G        Top/bottom</Text>
+            <Text bold color="yellow">
+              Prompt Sample
+            </Text>
+            <Text> z Collapse/expand</Text>
+            <Text> j/k Scroll (when focused)</Text>
+            <Text> b/Space Page up/down</Text>
+            <Text> g/G Top/bottom</Text>
             <Text></Text>
-            <Text bold color="yellow">Combined Output View</Text>
-            <Text>  y          Copy to clipboard</Text>
-            <Text>  w          Save to file</Text>
-            <Text>  Esc/q      Return to main view</Text>
+            <Text bold color="yellow">
+              Combined Output View
+            </Text>
+            <Text> y Copy to clipboard</Text>
+            <Text> w Save to file</Text>
+            <Text> Esc/q Return to main view</Text>
           </Box>
         </Box>
 
@@ -334,14 +351,7 @@ interface CombinedResult {
   lines: number;
 }
 
-type FocusField =
-  | "none"
-  | "filter"
-  | "rootDir"
-  | "preamble"
-  | "goal"
-  | "presetName"
-  | "exportPath";
+type FocusField = "none" | "filter" | "rootDir" | "preamble" | "goal" | "presetName" | "exportPath";
 
 type QuickSelectKey =
   | "allText"
@@ -403,7 +413,7 @@ const DEFAULT_IGNORES = [
   "out/",
   ".next/",
   ".turbo/",
-  ".vercel/"
+  ".vercel/",
 ];
 
 const TEXT_EXTENSIONS = new Set<string>([
@@ -483,7 +493,7 @@ const TEXT_EXTENSIONS = new Set<string>([
   ".ps1",
   ".gradle",
   ".properties",
-  ".cmake"
+  ".cmake",
 ]);
 
 // Files without extensions that are known to be text
@@ -522,7 +532,7 @@ const TEXT_FILENAMES = new Set<string>([
   ".nvmrc",
   ".dockerignore",
   ".helmignore",
-  ".npmignore"
+  ".npmignore",
 ]);
 
 const PRESET_FILE = path.join(os.homedir(), ".source2prompt.json");
@@ -544,7 +554,7 @@ function formatBytes(bytes: number): string {
   const units = ["B", "KB", "MB", "GB"];
   const k = 1024;
   const i = Math.min(units.length - 1, Math.floor(Math.log(bytes) / Math.log(k)));
-  const value = bytes / Math.pow(k, i);
+  const value = bytes / k ** i;
   const decimals = value >= 10 || i === 0 ? 0 : 1;
   return `${value.toFixed(decimals)} ${units[i]}`;
 }
@@ -648,8 +658,8 @@ async function loadGitignoreMatcher(dirAbs: string): Promise<Ignore | null> {
 
   const patterns = content
     .split(/\r?\n/)
-    .map(line => line.trimEnd())
-    .filter(line => line.length > 0 && !line.startsWith("#"));
+    .map((line) => line.trimEnd())
+    .filter((line) => line.length > 0 && !line.startsWith("#"));
 
   if (patterns.length === 0) return null;
   const matcher = ignore();
@@ -678,7 +688,7 @@ function shouldIgnorePath(relPath: string, isDir: boolean, rules: IgnoreRule[]):
 
 async function scanProject(
   rootDir: string,
-  onProgress?: (info: { processedFiles: number; currentPath?: string }) => void
+  onProgress?: (info: { processedFiles: number; currentPath?: string }) => void,
 ): Promise<{ root: FileNode; flatFiles: FileNode[] }> {
   const resolvedRoot = path.resolve(rootDir);
   const defaultIgnore = await buildIgnore(resolvedRoot);
@@ -694,7 +704,7 @@ async function scanProject(
     isText: false,
     category: "other",
     numLines: 0,
-    children: []
+    children: [],
   };
 
   const flatFiles: FileNode[] = [];
@@ -705,7 +715,7 @@ async function scanProject(
     parent: FileNode,
     relDir: string,
     depth: number,
-    rules: IgnoreRule[]
+    rules: IgnoreRule[],
   ) {
     let entries: fs.Dirent[];
     try {
@@ -741,7 +751,7 @@ async function scanProject(
             isText: false,
             category: "other",
             numLines: 0,
-            children: []
+            children: [],
           };
           await walk(absPath, node, relPath, depth + 1, nextRules);
           return node;
@@ -758,7 +768,7 @@ async function scanProject(
           let isText = isTextFile(extension, entry.name);
           let content = "";
           let numLines = isText && sizeBytes > MAX_READ_BYTES ? -1 : 0;
-          let tokens: number | undefined = undefined;
+          let tokens: number | undefined;
 
           if (isText && sizeBytes <= MAX_READ_BYTES) {
             try {
@@ -786,7 +796,7 @@ async function scanProject(
             category: getFileCategory(extension),
             numLines,
             tokens,
-            children: undefined
+            children: undefined,
           };
 
           flatFiles.push(node);
@@ -914,7 +924,7 @@ function stripHashCommentsConservative(content: string): string {
         out += c;
         continue;
       }
-      if (!inSingle && c === "\"") {
+      if (!inSingle && c === '"') {
         inDouble = !inDouble;
         out += c;
         continue;
@@ -942,8 +952,8 @@ function stripHashCommentsPython(content: string): string {
   const len = content.length;
   let inTripleDouble = false; // """
   let inTripleSingle = false; // '''
-  let inSingleQuote = false;  // '
-  let inDoubleQuote = false;  // "
+  let inSingleQuote = false; // '
+  let inDoubleQuote = false; // "
 
   // Check for shebang on first line
   if (content.startsWith("#!")) {
@@ -971,13 +981,27 @@ function stripHashCommentsPython(content: string): string {
     }
 
     // Check for triple quotes (must check before single quotes)
-    if (!inTripleSingle && !inSingleQuote && !inDoubleQuote && c === "\"" && next === "\"" && next2 === "\"") {
+    if (
+      !inTripleSingle &&
+      !inSingleQuote &&
+      !inDoubleQuote &&
+      c === '"' &&
+      next === '"' &&
+      next2 === '"'
+    ) {
       inTripleDouble = !inTripleDouble;
-      out += "\"\"\"";
+      out += '"""';
       i += 3;
       continue;
     }
-    if (!inTripleDouble && !inSingleQuote && !inDoubleQuote && c === "'" && next === "'" && next2 === "'") {
+    if (
+      !inTripleDouble &&
+      !inSingleQuote &&
+      !inDoubleQuote &&
+      c === "'" &&
+      next === "'" &&
+      next2 === "'"
+    ) {
       inTripleSingle = !inTripleSingle;
       out += "'''";
       i += 3;
@@ -992,7 +1016,7 @@ function stripHashCommentsPython(content: string): string {
         i++;
         continue;
       }
-      if (!inSingleQuote && c === "\"") {
+      if (!inSingleQuote && c === '"') {
         inDoubleQuote = !inDoubleQuote;
         out += c;
         i++;
@@ -1012,7 +1036,10 @@ function stripHashCommentsPython(content: string): string {
   }
 
   // Trim trailing whitespace from each line
-  return out.split(/\r?\n/).map(l => l.trimEnd()).join("\n");
+  return out
+    .split(/\r?\n/)
+    .map((l) => l.trimEnd())
+    .join("\n");
 }
 
 function stripHtmlComments(content: string): string {
@@ -1021,7 +1048,7 @@ function stripHtmlComments(content: string): string {
 
 async function transformFileContent(
   file: FileNode,
-  options: { removeComments: boolean; minify: boolean }
+  options: { removeComments: boolean; minify: boolean },
 ): Promise<string> {
   if (!file.isText) return "";
   let text = await fsp.readFile(file.path, "utf8").catch(() => "");
@@ -1052,12 +1079,7 @@ async function transformFileContent(
       ext === ".hpp"
     ) {
       text = stripCommentsGeneric(text);
-    } else if (
-      ext === ".py" ||
-      ext === ".rb" ||
-      ext === ".sh" ||
-      ext === ".bash"
-    ) {
+    } else if (ext === ".py" || ext === ".rb" || ext === ".sh" || ext === ".bash") {
       text = ext === ".py" ? stripHashCommentsPython(text) : stripHashCommentsConservative(text);
     } else if (
       ext === ".md" ||
@@ -1079,14 +1101,7 @@ async function transformFileContent(
       ext === ".mjs" ||
       ext === ".cjs"
     ) {
-      const loader =
-        ext === ".tsx"
-          ? "tsx"
-          : ext === ".ts"
-          ? "ts"
-          : ext === ".jsx"
-          ? "jsx"
-          : "js";
+      const loader = ext === ".tsx" ? "tsx" : ext === ".ts" ? "ts" : ext === ".jsx" ? "jsx" : "js";
 
       if (typeof Bun !== "undefined" && Bun?.transform) {
         try {
@@ -1101,25 +1116,16 @@ async function transformFileContent(
       try {
         const result = await terserMinify(text, {
           ecma: 2020,
-          module:
-            ext === ".mjs" ||
-            ext === ".js" ||
-            ext === ".ts" ||
-            ext === ".tsx",
+          module: ext === ".mjs" || ext === ".js" || ext === ".ts" || ext === ".tsx",
           compress: true,
           mangle: true,
-          format: { comments: false }
+          format: { comments: false },
         });
         if (result.code) text = result.code;
       } catch {
         // fallback to raw
       }
-    } else if (
-      ext === ".css" ||
-      ext === ".scss" ||
-      ext === ".sass" ||
-      ext === ".less"
-    ) {
+    } else if (ext === ".css" || ext === ".scss" || ext === ".sass" || ext === ".less") {
       try {
         const result = csso.minify(text);
         text = result.css;
@@ -1134,7 +1140,7 @@ async function transformFileContent(
           removeRedundantAttributes: true,
           removeEmptyAttributes: true,
           minifyCSS: true,
-          minifyJS: true
+          minifyJS: true,
         });
       } catch {
         // ignore
@@ -1145,19 +1151,15 @@ async function transformFileContent(
       } catch {
         // ignore
       }
-    } else if (
-      ext === ".md" ||
-      ext === ".mdx" ||
-      ext === ".markdown"
-    ) {
+    } else if (ext === ".md" || ext === ".mdx" || ext === ".markdown") {
       text = stripHtmlComments(text)
         .split(/\r?\n/)
-        .map(l => l.trimEnd())
+        .map((l) => l.trimEnd())
         .join("\n");
     } else {
       text = text
         .split(/\r?\n/)
-        .map(l => l.trimEnd())
+        .map((l) => l.trimEnd())
         .join("\n");
     }
   }
@@ -1167,18 +1169,14 @@ async function transformFileContent(
 
 /* ---------- Project tree section ---------- */
 
-function buildProjectTreeLines(
-  root: FileNode | null,
-  selected: Set<string>
-): string[] {
+function buildProjectTreeLines(root: FileNode | null, selected: Set<string>): string[] {
   if (!root) return [];
   const lines: string[] = [];
 
   const cache = new Map<string, boolean>();
   const hasSelected = (node: FileNode): boolean => {
     if (cache.has(node.path)) return cache.get(node.path)!;
-    let has =
-      !node.isDirectory && selected.has(node.path);
+    let has = !node.isDirectory && selected.has(node.path);
     if (node.children) {
       for (const child of node.children) {
         if (hasSelected(child)) {
@@ -1200,8 +1198,8 @@ function buildProjectTreeLines(
   const printNode = (node: FileNode, prefix: string, isLast: boolean) => {
     if (!hasSelected(node)) return;
     const isRoot = node.relPath === ".";
-    const connector = isRoot ? "" : (isLast ? "└── " : "├── ");
-    const childPrefix = isRoot ? "" : (prefix + (isLast ? "    " : "│   "));
+    const connector = isRoot ? "" : isLast ? "└── " : "├── ";
+    const childPrefix = isRoot ? "" : prefix + (isLast ? "    " : "│   ");
 
     if (node.isDirectory) {
       const label = isRoot ? node.name + "/" : node.name + "/";
@@ -1215,7 +1213,7 @@ function buildProjectTreeLines(
     }
 
     if (node.children && node.children.length) {
-      const selectedChildren = node.children.filter(c => hasSelected(c));
+      const selectedChildren = node.children.filter((c) => hasSelected(c));
       selectedChildren.forEach((child, idx) => {
         const childIsLast = idx === selectedChildren.length - 1;
         printNode(child, childPrefix, childIsLast);
@@ -1236,10 +1234,10 @@ async function buildCombinedOutput(
   flatFiles: FileNode[],
   selected: Set<string>,
   options: CombineOptions,
-  onProgress?: (info: { index: number; total: number; relPath: string }) => void
+  onProgress?: (info: { index: number; total: number; relPath: string }) => void,
 ): Promise<CombinedResult> {
   const selectedFiles = flatFiles
-    .filter(f => !f.isDirectory && f.isText && selected.has(f.path))
+    .filter((f) => !f.isDirectory && f.isText && selected.has(f.path))
     .sort((a, b) => a.relPath.localeCompare(b.relPath));
 
   const bodyLines: string[] = [];
@@ -1255,7 +1253,7 @@ async function buildCombinedOutput(
     // Rough line count, sufficient for stats
     let lines = 1;
     for (let i = 0; i < line.length; i++) {
-      if (line[i] === '\n') lines++;
+      if (line[i] === "\n") lines++;
     }
     bodyLinesCount += lines;
   };
@@ -1289,16 +1287,17 @@ async function buildCombinedOutput(
     onProgress?.({ index: idx + 1, total: selectedFiles.length, relPath: file.relPath });
     const transformed = await transformFileContent(file, {
       removeComments: options.removeComments,
-      minify: options.minify
+      minify: options.minify,
     });
     const content = transformed.trimEnd();
-    const numLines =
-      content.length === 0 ? 0 : content.split(/\r?\n/).length;
+    const numLines = content.length === 0 ? 0 : content.split(/\r?\n/).length;
     const lang = languageFromExtension(file.extension);
     const fileTokens = countTokens(content);
     const contentBytes = Buffer.byteLength(content, "utf8");
 
-    pushLine(`<file path="${file.relPath}" lang="${lang}" lines="${numLines}" bytes="${contentBytes}" tokens="${fileTokens}">`);
+    pushLine(
+      `<file path="${file.relPath}" lang="${lang}" lines="${numLines}" bytes="${contentBytes}" tokens="${fileTokens}">`,
+    );
     pushLine(content);
     pushLine("</file>");
     pushLine("");
@@ -1307,7 +1306,7 @@ async function buildCombinedOutput(
   pushLine("</files>");
 
   // Adjust counters for the final join which adds N-1 newlines, not N
-  if (bodyBytes > 0) bodyBytes -= 1; 
+  if (bodyBytes > 0) bodyBytes -= 1;
 
   const headerLines = [
     "===== SOURCE2PROMPT v2 =====",
@@ -1321,7 +1320,7 @@ async function buildCombinedOutput(
     `body_tokens_est: ${bodyTokens}`,
     `options: include_preamble=${options.includePreamble}, include_goal=${options.includeGoal}, remove_comments=${options.removeComments}, minify=${options.minify}`,
     "[/meta]",
-    ""
+    "",
   ];
 
   const text = [...headerLines, ...bodyLines].join("\n");
@@ -1336,10 +1335,10 @@ async function buildPromptPreviewSnippet(
   root: FileNode | null,
   flatFiles: FileNode[],
   selected: Set<string>,
-  options: CombineOptions
+  options: CombineOptions,
 ): Promise<string> {
   const selectedFiles = flatFiles
-    .filter(f => !f.isDirectory && f.isText && selected.has(f.path))
+    .filter((f) => !f.isDirectory && f.isText && selected.has(f.path))
     .sort((a, b) => a.relPath.localeCompare(b.relPath));
 
   const hasPreamble = options.includePreamble && options.preambleText.trim();
@@ -1381,7 +1380,7 @@ async function buildPromptPreviewSnippet(
       try {
         const head = await readFileHeadUtf8(f.path, headBytes);
         const prefix = `// Large file (${formatBytes(f.sizeBytes)}). Sample shows first ${formatBytes(
-          headBytes
+          headBytes,
         )}.\n\n`;
         snippet = prefix + head;
       } catch {
@@ -1390,7 +1389,7 @@ async function buildPromptPreviewSnippet(
     } else {
       const transformed = await transformFileContent(f, {
         removeComments: options.removeComments,
-        minify: options.minify
+        minify: options.minify,
       });
       snippet = transformed || "";
     }
@@ -1401,17 +1400,11 @@ async function buildPromptPreviewSnippet(
     if (snippet.length > maxChars) {
       snippet = snippet.slice(0, maxChars) + "\n...";
     }
-    lines.push(
-      `--- file: ${f.relPath} (${f.extension || "txt"}) ---`,
-      snippet,
-      ""
-    );
+    lines.push(`--- file: ${f.relPath} (${f.extension || "txt"}) ---`, snippet, "");
   }
 
   if (selectedFiles.length > previewFiles.length) {
-    lines.push(
-      `... + ${selectedFiles.length - previewFiles.length} more file(s) in full prompt.`
-    );
+    lines.push(`... + ${selectedFiles.length - previewFiles.length} more file(s) in full prompt.`);
   }
 
   lines.push("</files_preview>");
@@ -1517,7 +1510,7 @@ async function copyToClipboard(text: string): Promise<boolean> {
       await proc.exited;
       return proc.exitCode === 0;
     }
-    
+
     return false;
   } catch {
     return false;
@@ -1530,12 +1523,12 @@ function getPreferredEditor(): string {
 }
 
 function quoteForShell(arg: string): string {
-  return `"${arg.replace(/"/g, "\\\"")}"`;
+  return `"${arg.replace(/"/g, '\\"')}"`;
 }
 
 async function editTextInExternalEditor(
   initialText: string,
-  filenameHint: string
+  filenameHint: string,
 ): Promise<{ ok: true; text: string; changed: boolean } | { ok: false; error: string }> {
   const editor = getPreferredEditor();
   const safeHint = filenameHint.replace(/[^a-z0-9_-]+/gi, "_");
@@ -1570,38 +1563,35 @@ const QUICK_SELECT_LABELS: Record<QuickSelectKey, string> = {
   java: "Toggled all Java files",
   ruby: "Toggled all Ruby files",
   php: "Toggled all PHP files",
-  rust: "Toggled all Rust files"
+  rust: "Toggled all Rust files",
 };
 
-function filterFilesByQuickSelect(
-  files: FileNode[],
-  key: QuickSelectKey
-): FileNode[] {
+function filterFilesByQuickSelect(files: FileNode[], key: QuickSelectKey): FileNode[] {
   switch (key) {
     case "allText":
-      return files.filter(f => !f.isDirectory && f.isText);
+      return files.filter((f) => !f.isDirectory && f.isText);
     case "javascript":
-      return files.filter(f => f.category === "javascript");
+      return files.filter((f) => f.category === "javascript");
     case "react":
-      return files.filter(f => f.category === "react");
+      return files.filter((f) => f.category === "react");
     case "typescript":
-      return files.filter(f => f.category === "typescript");
+      return files.filter((f) => f.category === "typescript");
     case "json":
-      return files.filter(f => f.category === "json");
+      return files.filter((f) => f.category === "json");
     case "markdown":
-      return files.filter(f => f.category === "markdown");
+      return files.filter((f) => f.category === "markdown");
     case "python":
-      return files.filter(f => f.category === "python");
+      return files.filter((f) => f.category === "python");
     case "go":
-      return files.filter(f => f.category === "go");
+      return files.filter((f) => f.category === "go");
     case "java":
-      return files.filter(f => f.category === "java");
+      return files.filter((f) => f.category === "java");
     case "ruby":
-      return files.filter(f => f.category === "ruby");
+      return files.filter((f) => f.category === "ruby");
     case "php":
-      return files.filter(f => f.category === "php");
+      return files.filter((f) => f.category === "php");
     case "rust":
-      return files.filter(f => f.category === "rust");
+      return files.filter((f) => f.category === "rust");
     default:
       return [];
   }
@@ -1611,7 +1601,7 @@ function filterFilesByQuickSelect(
 
 function debounce<F extends (...args: any[]) => void>(
   fn: F,
-  delay: number
+  delay: number,
 ): (...args: Parameters<F>) => void {
   let timer: NodeJS.Timeout | null = null;
   return (...args: Parameters<F>) => {
@@ -1637,9 +1627,7 @@ const App: React.FC<AppProps> = ({ initialRootDir }) => {
   const { stdout } = useStdout();
   const { setRawMode, isRawModeSupported } = useStdin();
   const [rootDir, setRootDir] = useState(
-    initialRootDir
-      ? path.resolve(expandTilde(initialRootDir))
-      : path.resolve(process.cwd())
+    initialRootDir ? path.resolve(expandTilde(initialRootDir)) : path.resolve(process.cwd()),
   );
 
   const [rootNode, setRootNode] = useState<FileNode | null>(null);
@@ -1711,12 +1699,13 @@ const App: React.FC<AppProps> = ({ initialRootDir }) => {
 
   const previewLines = useMemo(
     () => (previewContent ? previewContent.split(/\r?\n/) : []),
-    [previewContent]
+    [previewContent],
   );
   const previewMaxScroll = Math.max(0, previewLines.length - previewCodeHeight);
   const previewWindowText = useMemo(
-    () => previewLines.slice(previewScrollOffset, previewScrollOffset + previewCodeHeight).join("\n"),
-    [previewLines, previewScrollOffset, previewCodeHeight]
+    () =>
+      previewLines.slice(previewScrollOffset, previewScrollOffset + previewCodeHeight).join("\n"),
+    [previewLines, previewScrollOffset, previewCodeHeight],
   );
 
   useEffect(() => {
@@ -1727,7 +1716,7 @@ const App: React.FC<AppProps> = ({ initialRootDir }) => {
 
   const promptPreviewLines = useMemo(
     () => (promptPreview ? promptPreview.split(/\r?\n/) : []),
-    [promptPreview]
+    [promptPreview],
   );
   const promptSampleMaxScroll = promptSampleCollapsed
     ? 0
@@ -1739,12 +1728,10 @@ const App: React.FC<AppProps> = ({ initialRootDir }) => {
     }
   }, [promptSampleScrollOffset, promptSampleMaxScroll]);
 
-  const handleScan = async (
-    dir: string
-  ): Promise<{ root: FileNode | null; files: FileNode[] }> => {
+  const handleScan = async (dir: string): Promise<{ root: FileNode | null; files: FileNode[] }> => {
     const resolved = path.resolve(expandTilde(dir));
     setRootDir(resolved);
-    
+
     // Increment scan ID to invalidate previous scans
     const currentScanId = scanId + 1;
     setScanId(currentScanId);
@@ -1762,24 +1749,24 @@ const App: React.FC<AppProps> = ({ initialRootDir }) => {
     tokenEstimateCacheRef.current.clear();
 
     try {
-      const result = await scanProject(resolved, info => {
+      const result = await scanProject(resolved, (info) => {
         // Only update progress if this is the active scan
-        setScanId(prev => {
-           if (prev === currentScanId) {
-             setProgressText(
-                info.currentPath
-                  ? `Scanning ${info.currentPath} (${info.processedFiles} files)...`
-                  : `Scanning... (${info.processedFiles} files)`
-              );
-           }
-           return prev;
+        setScanId((prev) => {
+          if (prev === currentScanId) {
+            setProgressText(
+              info.currentPath
+                ? `Scanning ${info.currentPath} (${info.processedFiles} files)...`
+                : `Scanning... (${info.processedFiles} files)`,
+            );
+          }
+          return prev;
         });
       });
-      
+
       // Check if this scan is still the latest
       let isLatest = false;
-      setScanId(prev => {
-        isLatest = (prev === currentScanId);
+      setScanId((prev) => {
+        isLatest = prev === currentScanId;
         return prev;
       });
 
@@ -1797,11 +1784,11 @@ const App: React.FC<AppProps> = ({ initialRootDir }) => {
     } catch (err: any) {
       // Check if this scan is still the latest
       let isLatest = false;
-      setScanId(prev => {
-        isLatest = (prev === currentScanId);
+      setScanId((prev) => {
+        isLatest = prev === currentScanId;
         return prev;
       });
-      
+
       if (isLatest) {
         setScanError(err?.message || String(err));
         setStatus("Scan error");
@@ -1826,9 +1813,7 @@ const App: React.FC<AppProps> = ({ initialRootDir }) => {
     if (!rootNode) return [];
     if (filter.trim()) {
       const q = filter.trim().toLowerCase();
-      return flatFiles.filter(f =>
-        f.relPath.toLowerCase().includes(q)
-      );
+      return flatFiles.filter((f) => f.relPath.toLowerCase().includes(q));
     }
 
     const out: FileNode[] = [];
@@ -1859,27 +1844,18 @@ const App: React.FC<AppProps> = ({ initialRootDir }) => {
 
   const debouncedStats = useMemo(
     () =>
-      debounce(
-        (
-          files: FileNode[],
-          selectedSet: Set<string>
-        ) => {
-          const selectedFiles = files.filter(
-            f => !f.isDirectory && f.isText && selectedSet.has(f.path)
-          );
-          const size = selectedFiles.reduce(
-            (acc, f) => acc + f.sizeBytes,
-            0
-          );
-          const lines = selectedFiles.reduce((acc, f) => acc + Math.max(0, f.numLines), 0);
+      debounce((files: FileNode[], selectedSet: Set<string>) => {
+        const selectedFiles = files.filter(
+          (f) => !f.isDirectory && f.isText && selectedSet.has(f.path),
+        );
+        const size = selectedFiles.reduce((acc, f) => acc + f.sizeBytes, 0);
+        const lines = selectedFiles.reduce((acc, f) => acc + Math.max(0, f.numLines), 0);
 
-          setStatsFileCount(selectedFiles.length);
-          setStatsSizeBytes(size);
-          setStatsLineCount(lines);
-        },
-        200
-      ),
-    []
+        setStatsFileCount(selectedFiles.length);
+        setStatsSizeBytes(size);
+        setStatsLineCount(lines);
+      }, 200),
+    [],
   );
 
   useEffect(() => {
@@ -1893,12 +1869,11 @@ const App: React.FC<AppProps> = ({ initialRootDir }) => {
     const timer = setTimeout(() => {
       (async () => {
         const selectedFiles = flatFiles.filter(
-          f => !f.isDirectory && f.isText && selected.has(f.path)
+          (f) => !f.isDirectory && f.isText && selected.has(f.path),
         );
 
         const baseTokens =
-          (includePreamble ? countTokens(preamble) : 0) +
-          (includeGoal ? countTokens(goal) : 0);
+          (includePreamble ? countTokens(preamble) : 0) + (includeGoal ? countTokens(goal) : 0);
 
         const needsTransform = removeComments || minify;
         const cache = tokenEstimateCacheRef.current;
@@ -1948,7 +1923,7 @@ const App: React.FC<AppProps> = ({ initialRootDir }) => {
           try {
             const transformed = await transformFileContent(f, {
               removeComments,
-              minify
+              minify,
             });
             const nextTokens = countTokens(transformed);
             cache.set(key, nextTokens);
@@ -1962,7 +1937,7 @@ const App: React.FC<AppProps> = ({ initialRootDir }) => {
           if (i % 5 === 4 && !cancelled && runId === tokenEstimateRunIdRef.current) {
             setStatsTokens(totalTokens);
           }
-          if (i % 3 === 2) await new Promise(r => setTimeout(r, 0));
+          if (i % 3 === 2) await new Promise((r) => setTimeout(r, 0));
         }
 
         if (cancelled || runId !== tokenEstimateRunIdRef.current) return;
@@ -1971,11 +1946,10 @@ const App: React.FC<AppProps> = ({ initialRootDir }) => {
         if (!cancelled && runId === tokenEstimateRunIdRef.current) {
           // Fall back to a safe approximation if the background computation fails
           const selectedFiles = flatFiles.filter(
-            f => !f.isDirectory && f.isText && selected.has(f.path)
+            (f) => !f.isDirectory && f.isText && selected.has(f.path),
           );
           const baseTokens =
-            (includePreamble ? countTokens(preamble) : 0) +
-            (includeGoal ? countTokens(goal) : 0);
+            (includePreamble ? countTokens(preamble) : 0) + (includeGoal ? countTokens(goal) : 0);
           const approxTokens = selectedFiles.reduce((acc, f) => {
             if (f.tokens !== undefined) return acc + f.tokens;
             return acc + Math.ceil(f.sizeBytes / 4);
@@ -1989,16 +1963,7 @@ const App: React.FC<AppProps> = ({ initialRootDir }) => {
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [
-    flatFiles,
-    selected,
-    includePreamble,
-    preamble,
-    includeGoal,
-    goal,
-    removeComments,
-    minify
-  ]);
+  }, [flatFiles, selected, includePreamble, preamble, includeGoal, goal, removeComments, minify]);
 
   useEffect(() => {
     const node = visibleNodes[cursor];
@@ -2018,20 +1983,18 @@ const App: React.FC<AppProps> = ({ initialRootDir }) => {
     if (node.isText) {
       if (node.sizeBytes > MAX_READ_BYTES) {
         const headBytes = Math.min(64 * 1024, node.sizeBytes);
-        setPreviewContent(
-          `// Large file (${formatBytes(node.sizeBytes)}). Loading preview...`
-        );
+        setPreviewContent(`// Large file (${formatBytes(node.sizeBytes)}). Loading preview...`);
         readFileHeadUtf8(node.path, headBytes)
-          .then(head => {
+          .then((head) => {
             if (cancelled) return;
             const prefix = `// Large file (${formatBytes(node.sizeBytes)}). Showing first ${formatBytes(
-              headBytes
+              headBytes,
             )}.\n\n`;
             const combined = prefix + head;
             setPreviewContent(
               combined.length > MAX_PREVIEW_CHARS
                 ? combined.slice(0, MAX_PREVIEW_CHARS) + "\n..."
-                : combined
+                : combined,
             );
           })
           .catch(() => {
@@ -2041,12 +2004,10 @@ const App: React.FC<AppProps> = ({ initialRootDir }) => {
         setPreviewContent("// Loading preview...");
         fsp
           .readFile(node.path, "utf8")
-          .then(content => {
+          .then((content) => {
             if (cancelled) return;
             setPreviewContent(
-              content.length > MAX_PREVIEW_CHARS
-                ? content.slice(0, MAX_PREVIEW_CHARS)
-                : content
+              content.length > MAX_PREVIEW_CHARS ? content.slice(0, MAX_PREVIEW_CHARS) : content,
             );
           })
           .catch(() => {
@@ -2074,20 +2035,13 @@ const App: React.FC<AppProps> = ({ initialRootDir }) => {
           includeGoal,
           goalText: goal,
           removeComments,
-          minify
+          minify,
         };
-        const snippet = await buildPromptPreviewSnippet(
-          rootNode,
-          flatFiles,
-          selected,
-          options
-        );
+        const snippet = await buildPromptPreviewSnippet(rootNode, flatFiles, selected, options);
         if (!cancelled) setPromptPreview(snippet);
-      })().catch(err => {
+      })().catch((err) => {
         if (!cancelled) {
-          setPromptPreview(
-            "// Error building preview: " + (err?.message || String(err))
-          );
+          setPromptPreview("// Error building preview: " + (err?.message || String(err)));
         }
       });
     }, 400);
@@ -2095,57 +2049,63 @@ const App: React.FC<AppProps> = ({ initialRootDir }) => {
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [rootNode, flatFiles, selected, includePreamble, preamble, includeGoal, goal, removeComments, minify]);
+  }, [
+    rootNode,
+    flatFiles,
+    selected,
+    includePreamble,
+    preamble,
+    includeGoal,
+    goal,
+    removeComments,
+    minify,
+  ]);
 
-	    const toggleSelectNode = (node: FileNode) => {
-	      if (node.isDirectory) {
-	        const descendants: FileNode[] = [];
-	        const collectDesc = (n: FileNode) => {
-	          if (isSelectableTextNode(n)) descendants.push(n);
-	          if (n.children) for (const c of n.children) collectDesc(c);
-	        };
-	        collectDesc(node);
-	        if (descendants.length === 0) {
-	          setStatus(`No selectable text files in "${node.relPath}".`);
-	          return;
-	        }
-	        const newSel = new Set(selected);
-	        const allSelected = descendants.every(d => newSel.has(d.path));
-	        if (allSelected) {
-	          for (const d of descendants) newSel.delete(d.path);
-	        } else {
-	          for (const d of descendants) newSel.add(d.path);
-	        }
-	        setSelected(newSel);
-	        setStatus(
-	          `${allSelected ? "Deselected" : "Selected"} ${descendants.length} files in "${node.relPath}"`
-	        );
-	        return;
-	      }
-	  
-	      // It's a file
-	      if (!node.isText) {
-	        setStatus("File is binary and cannot be included.");
-	        return;
-	      }
-	      if (!isSelectableTextNode(node)) {
-	        setStatus(
-	          `File too large to include (>${formatBytes(MAX_INCLUDE_BYTES)}): ${node.relPath}`
-	        );
-	        return;
-	      }
-	      const newSel = new Set(selected);
-	      const wasSelected = newSel.has(node.path);
-	      if (wasSelected) newSel.delete(node.path);
-	      else newSel.add(node.path);
-	      setSelected(newSel);
-	  
-	      if (!wasSelected && node.sizeBytes > MAX_READ_BYTES) {
-	        setStatus(
-	          `Selected large file (${formatBytes(node.sizeBytes)}). Generation may be slower.`
-	        );
-	      }
-	    };
+  const toggleSelectNode = (node: FileNode) => {
+    if (node.isDirectory) {
+      const descendants: FileNode[] = [];
+      const collectDesc = (n: FileNode) => {
+        if (isSelectableTextNode(n)) descendants.push(n);
+        if (n.children) for (const c of n.children) collectDesc(c);
+      };
+      collectDesc(node);
+      if (descendants.length === 0) {
+        setStatus(`No selectable text files in "${node.relPath}".`);
+        return;
+      }
+      const newSel = new Set(selected);
+      const allSelected = descendants.every((d) => newSel.has(d.path));
+      if (allSelected) {
+        for (const d of descendants) newSel.delete(d.path);
+      } else {
+        for (const d of descendants) newSel.add(d.path);
+      }
+      setSelected(newSel);
+      setStatus(
+        `${allSelected ? "Deselected" : "Selected"} ${descendants.length} files in "${node.relPath}"`,
+      );
+      return;
+    }
+
+    // It's a file
+    if (!node.isText) {
+      setStatus("File is binary and cannot be included.");
+      return;
+    }
+    if (!isSelectableTextNode(node)) {
+      setStatus(`File too large to include (>${formatBytes(MAX_INCLUDE_BYTES)}): ${node.relPath}`);
+      return;
+    }
+    const newSel = new Set(selected);
+    const wasSelected = newSel.has(node.path);
+    if (wasSelected) newSel.delete(node.path);
+    else newSel.add(node.path);
+    setSelected(newSel);
+
+    if (!wasSelected && node.sizeBytes > MAX_READ_BYTES) {
+      setStatus(`Selected large file (${formatBytes(node.sizeBytes)}). Generation may be slower.`);
+    }
+  };
   const moveCursor = (delta: number) => {
     if (!visibleNodes.length) return;
     const maxIndex = visibleNodes.length - 1;
@@ -2155,18 +2115,16 @@ const App: React.FC<AppProps> = ({ initialRootDir }) => {
     setCursor(next);
   };
 
-	  const toggleQuickSelect = (key: QuickSelectKey) => {
-	    if (!flatFiles.length) return;
-	    const matches = filterFilesByQuickSelect(flatFiles, key).filter(
-	      f => isSelectableTextNode(f)
-	    );
+  const toggleQuickSelect = (key: QuickSelectKey) => {
+    if (!flatFiles.length) return;
+    const matches = filterFilesByQuickSelect(flatFiles, key).filter((f) => isSelectableTextNode(f));
     if (!matches.length) {
       setStatus("No matching files for this quick select.");
       return;
     }
 
     const newSel = new Set(selected);
-    const allSelected = matches.every(m => newSel.has(m.path));
+    const allSelected = matches.every((m) => newSel.has(m.path));
     if (allSelected) {
       for (const m of matches) newSel.delete(m.path);
     } else {
@@ -2176,15 +2134,15 @@ const App: React.FC<AppProps> = ({ initialRootDir }) => {
     setStatus(QUICK_SELECT_LABELS[key]);
   };
 
-	  const clearSelectionInFilter = () => {
-	    if (!filter.trim()) return;
-	    const q = filter.trim().toLowerCase();
-	    const inFilter = flatFiles.filter(
-	      f => isSelectableTextNode(f) && f.relPath.toLowerCase().includes(q)
-	    );
-	    if (!inFilter.length) return;
-	    const newSel = new Set(selected);
-	    for (const f of inFilter) newSel.delete(f.path);
+  const clearSelectionInFilter = () => {
+    if (!filter.trim()) return;
+    const q = filter.trim().toLowerCase();
+    const inFilter = flatFiles.filter(
+      (f) => isSelectableTextNode(f) && f.relPath.toLowerCase().includes(q),
+    );
+    if (!inFilter.length) return;
+    const newSel = new Set(selected);
+    for (const f of inFilter) newSel.delete(f.path);
     setSelected(newSel);
     setStatus("Cleared selections for files matching current filter.");
   };
@@ -2193,11 +2151,11 @@ const App: React.FC<AppProps> = ({ initialRootDir }) => {
     if (!filter.trim()) {
       setStatus("No active filter.");
       return;
-	    }
-	    const q = filter.trim().toLowerCase();
-	    const matches = flatFiles.filter(
-	      f => isSelectableTextNode(f) && f.relPath.toLowerCase().includes(q)
-	    );
+    }
+    const q = filter.trim().toLowerCase();
+    const matches = flatFiles.filter(
+      (f) => isSelectableTextNode(f) && f.relPath.toLowerCase().includes(q),
+    );
     if (!matches.length) {
       setStatus("No files match current filter.");
       return;
@@ -2217,7 +2175,7 @@ const App: React.FC<AppProps> = ({ initialRootDir }) => {
     }
     setSelected(newSel);
     setStatus(
-      `${action === "select" ? "Selected" : "Deselected"} ${changed} file(s) matching current filter.`
+      `${action === "select" ? "Selected" : "Deselected"} ${changed} file(s) matching current filter.`,
     );
   };
 
@@ -2228,8 +2186,8 @@ const App: React.FC<AppProps> = ({ initialRootDir }) => {
       return;
     }
     const selectedRelPaths = flatFiles
-      .filter(f => selected.has(f.path))
-      .map(f => f.relPath)
+      .filter((f) => selected.has(f.path))
+      .map((f) => f.relPath)
       .sort();
 
     const preset: Preset = {
@@ -2242,13 +2200,11 @@ const App: React.FC<AppProps> = ({ initialRootDir }) => {
       minify,
       removeComments,
       selectedRelPaths,
-      createdAt: new Date().toISOString()
+      createdAt: new Date().toISOString(),
     };
 
-    const filtered = presets.filter(p => p.name !== name);
-    const next = [...filtered, preset].sort((a, b) =>
-      a.name.localeCompare(b.name)
-    );
+    const filtered = presets.filter((p) => p.name !== name);
+    const next = [...filtered, preset].sort((a, b) => a.name.localeCompare(b.name));
     setPresets(next);
     if (await savePresets(next)) {
       setPresetName("");
@@ -2280,26 +2236,22 @@ const App: React.FC<AppProps> = ({ initialRootDir }) => {
         const newSel = new Set<string>();
         for (const rel of preset.selectedRelPaths) {
           const abs = path.join(base, rel);
-          const node = files.find(f => f.path === abs);
+          const node = files.find((f) => f.path === abs);
           if (node && isSelectableTextNode(node)) newSel.add(abs);
         }
         setSelected(newSel);
-        setStatus(
-          `Loaded preset "${preset.name}" (${newSel.size} files selected).`
-        );
+        setStatus(`Loaded preset "${preset.name}" (${newSel.size} files selected).`);
       })();
     } else {
       const base = currentRootResolved;
       const newSel = new Set<string>();
       for (const rel of preset.selectedRelPaths) {
         const abs = path.join(base, rel);
-        const node = flatFiles.find(f => f.path === abs);
+        const node = flatFiles.find((f) => f.path === abs);
         if (node && isSelectableTextNode(node)) newSel.add(abs);
       }
       setSelected(newSel);
-      setStatus(
-        `Loaded preset "${preset.name}" (${newSel.size} files selected).`
-      );
+      setStatus(`Loaded preset "${preset.name}" (${newSel.size} files selected).`);
     }
   };
 
@@ -2313,15 +2265,13 @@ const App: React.FC<AppProps> = ({ initialRootDir }) => {
     } else {
       setStatus(`Deleted preset "${preset.name}" (memory only; save failed).`);
     }
-    setSelectedPresetIndex(prev =>
-      prev >= next.length ? Math.max(0, next.length - 1) : prev
-    );
+    setSelectedPresetIndex((prev) => (prev >= next.length ? Math.max(0, next.length - 1) : prev));
   };
 
   const handleGenerate = async () => {
     if (!rootNode) return;
     const selectedFiles = flatFiles.filter(
-      f => !f.isDirectory && f.isText && selected.has(f.path)
+      (f) => !f.isDirectory && f.isText && selected.has(f.path),
     );
     if (!selectedFiles.length) {
       setStatus("No files selected. Select at least one text file first.");
@@ -2337,30 +2287,24 @@ const App: React.FC<AppProps> = ({ initialRootDir }) => {
         includeGoal,
         goalText: goal,
         removeComments,
-        minify
+        minify,
       };
       let lastProgressAt = 0;
       let lastProgressIndex = 0;
-      const result = await buildCombinedOutput(
-        rootNode,
-        flatFiles,
-        selected,
-        options,
-        info => {
-          const now = Date.now();
-          if (info.index === lastProgressIndex) return;
-          if (now - lastProgressAt < 120 && info.index !== info.total) return;
-          lastProgressAt = now;
-          lastProgressIndex = info.index;
-          setStatus(`Generating (${info.index}/${info.total}): ${info.relPath}`);
-        }
-      );
+      const result = await buildCombinedOutput(rootNode, flatFiles, selected, options, (info) => {
+        const now = Date.now();
+        if (info.index === lastProgressIndex) return;
+        if (now - lastProgressAt < 120 && info.index !== info.total) return;
+        lastProgressAt = now;
+        lastProgressIndex = info.index;
+        setStatus(`Generating (${info.index}/${info.total}): ${info.relPath}`);
+      });
       setCombined(result);
       setMode("combined");
       setStatus(
         `Generated: ${formatBytes(
-          result.bytes
-        )}, ~${result.tokens.toLocaleString()} tokens. Press Y to copy.`
+          result.bytes,
+        )}, ~${result.tokens.toLocaleString()} tokens. Press Y to copy.`,
       );
     } catch (err: any) {
       setStatus(err?.message || String(err));
@@ -2370,9 +2314,7 @@ const App: React.FC<AppProps> = ({ initialRootDir }) => {
   const handleSaveCombinedToFile = async () => {
     if (!combined) return;
     const target = exportPath.trim() || "combined-prompt.txt";
-    const resolved = path.isAbsolute(target)
-      ? target
-      : path.resolve(rootDir, target);
+    const resolved = path.isAbsolute(target) ? target : path.resolve(rootDir, target);
     try {
       await fsp.writeFile(resolved, combined.text, "utf8");
       setStatus(`Saved combined output to ${resolved}`);
@@ -2447,14 +2389,14 @@ const App: React.FC<AppProps> = ({ initialRootDir }) => {
       return;
     }
     if (input === "?" && focusField === "none") {
-      setShowHelp(prev => !prev);
+      setShowHelp((prev) => !prev);
       setConfirmExit(false);
       return;
     }
 
     // F1 toggles help modal (check for function key)
     if (input === "\x1bOP" || input === "\x1b[11~" || (key.meta && input === "1")) {
-      setShowHelp(prev => !prev);
+      setShowHelp((prev) => !prev);
       setConfirmExit(false);
       return;
     }
@@ -2520,12 +2462,8 @@ const App: React.FC<AppProps> = ({ initialRootDir }) => {
       }
       if (lower === "y") {
         if (combined) {
-          void copyToClipboard(combined.text).then(ok =>
-            setStatus(
-              ok
-                ? "Copied combined output to clipboard."
-                : "Clipboard copy failed."
-            )
+          void copyToClipboard(combined.text).then((ok) =>
+            setStatus(ok ? "Copied combined output to clipboard." : "Clipboard copy failed."),
           );
         }
         return;
@@ -2537,24 +2475,24 @@ const App: React.FC<AppProps> = ({ initialRootDir }) => {
       // Scrolling in combined view
       const viewHeight = Math.max(5, rows - 15);
       if (key.upArrow || input === "k") {
-        setCombinedScrollOffset(prev => Math.max(0, prev - 1));
+        setCombinedScrollOffset((prev) => Math.max(0, prev - 1));
         return;
       }
       if (key.downArrow || input === "j") {
         if (combined) {
           const maxScroll = Math.max(0, combined.lines - viewHeight);
-          setCombinedScrollOffset(prev => Math.min(maxScroll, prev + 1));
+          setCombinedScrollOffset((prev) => Math.min(maxScroll, prev + 1));
         }
         return;
       }
       if (key.pageUp || input === "b") {
-        setCombinedScrollOffset(prev => Math.max(0, prev - viewHeight));
+        setCombinedScrollOffset((prev) => Math.max(0, prev - viewHeight));
         return;
       }
       if (key.pageDown || input === " ") {
         if (combined) {
           const maxScroll = Math.max(0, combined.lines - viewHeight);
-          setCombinedScrollOffset(prev => Math.min(maxScroll, prev + viewHeight));
+          setCombinedScrollOffset((prev) => Math.min(maxScroll, prev + viewHeight));
         }
         return;
       }
@@ -2617,7 +2555,7 @@ const App: React.FC<AppProps> = ({ initialRootDir }) => {
       setStatus(
         next
           ? "Prompt sample collapsed. Press z to expand."
-          : "Prompt sample expanded. Press z to collapse."
+          : "Prompt sample expanded. Press z to collapse.",
       );
       return;
     }
@@ -2749,12 +2687,8 @@ const App: React.FC<AppProps> = ({ initialRootDir }) => {
 
     if (activePane === "config") {
       if (key.leftArrow || key.rightArrow) {
-        setConfigTab(prev =>
-          prev === "inputs"
-            ? "presets"
-            : prev === "presets"
-            ? "options"
-            : "inputs"
+        setConfigTab((prev) =>
+          prev === "inputs" ? "presets" : prev === "presets" ? "options" : "inputs",
         );
         return;
       }
@@ -2772,35 +2706,31 @@ const App: React.FC<AppProps> = ({ initialRootDir }) => {
 
       if (configTab === "options") {
         if (input.toLowerCase() === "i") {
-          setIncludePreamble(prev => !prev);
+          setIncludePreamble((prev) => !prev);
           return;
         }
         if (input.toLowerCase() === "o") {
-          setIncludeGoal(prev => !prev);
+          setIncludeGoal((prev) => !prev);
           return;
         }
         if (input.toLowerCase() === "m") {
-          setMinify(prev => !prev);
+          setMinify((prev) => !prev);
           return;
         }
         if (input.toLowerCase() === "x") {
-          setRemoveComments(prev => !prev);
+          setRemoveComments((prev) => !prev);
           return;
         }
       }
 
       if (configTab === "presets") {
         if (key.upArrow || input === "k") {
-          setSelectedPresetIndex(prev =>
-            prev <= 0 ? 0 : prev - 1
-          );
+          setSelectedPresetIndex((prev) => (prev <= 0 ? 0 : prev - 1));
           return;
         }
         if (key.downArrow || input === "j") {
-          setSelectedPresetIndex(prev =>
-            prev >= presets.length - 1
-              ? Math.max(0, presets.length - 1)
-              : prev + 1
+          setSelectedPresetIndex((prev) =>
+            prev >= presets.length - 1 ? Math.max(0, presets.length - 1) : prev + 1,
           );
           return;
         }
@@ -2823,19 +2753,19 @@ const App: React.FC<AppProps> = ({ initialRootDir }) => {
       if (!previewLines.length) return;
 
       if (key.upArrow || input === "k") {
-        setPreviewScrollOffset(prev => Math.max(0, prev - 1));
+        setPreviewScrollOffset((prev) => Math.max(0, prev - 1));
         return;
       }
       if (key.downArrow || input === "j") {
-        setPreviewScrollOffset(prev => Math.min(previewMaxScroll, prev + 1));
+        setPreviewScrollOffset((prev) => Math.min(previewMaxScroll, prev + 1));
         return;
       }
       if (key.pageUp || input === "b") {
-        setPreviewScrollOffset(prev => Math.max(0, prev - previewCodeHeight));
+        setPreviewScrollOffset((prev) => Math.max(0, prev - previewCodeHeight));
         return;
       }
       if (key.pageDown || input === " ") {
-        setPreviewScrollOffset(prev => Math.min(previewMaxScroll, prev + previewCodeHeight));
+        setPreviewScrollOffset((prev) => Math.min(previewMaxScroll, prev + previewCodeHeight));
         return;
       }
       if (input === "g") {
@@ -2853,19 +2783,21 @@ const App: React.FC<AppProps> = ({ initialRootDir }) => {
       if (!promptPreviewLines.length) return;
 
       if (key.upArrow || input === "k") {
-        setPromptSampleScrollOffset(prev => Math.max(0, prev - 1));
+        setPromptSampleScrollOffset((prev) => Math.max(0, prev - 1));
         return;
       }
       if (key.downArrow || input === "j") {
-        setPromptSampleScrollOffset(prev => Math.min(promptSampleMaxScroll, prev + 1));
+        setPromptSampleScrollOffset((prev) => Math.min(promptSampleMaxScroll, prev + 1));
         return;
       }
       if (key.pageUp || input === "b") {
-        setPromptSampleScrollOffset(prev => Math.max(0, prev - promptSampleCodeHeight));
+        setPromptSampleScrollOffset((prev) => Math.max(0, prev - promptSampleCodeHeight));
         return;
       }
       if (key.pageDown || input === " ") {
-        setPromptSampleScrollOffset(prev => Math.min(promptSampleMaxScroll, prev + promptSampleCodeHeight));
+        setPromptSampleScrollOffset((prev) =>
+          Math.min(promptSampleMaxScroll, prev + promptSampleCodeHeight),
+        );
         return;
       }
       if (input === "g") {
@@ -2880,16 +2812,13 @@ const App: React.FC<AppProps> = ({ initialRootDir }) => {
   });
 
   const cost = (statsTokens / 1_000_000) * COST_PER_1M_TOKENS;
-  const contextPercent = Math.min(
-    1,
-    statsTokens / CONTEXT_WINDOW
-  );
+  const contextPercent = Math.min(1, statsTokens / CONTEXT_WINDOW);
   const contextWarning =
     statsTokens > CONTEXT_WINDOW
       ? "Warning: Estimated tokens exceed context window; model may truncate."
       : statsTokens > 100_000
-      ? "Large prompt; ensure you're using a 128k+ context model."
-      : "";
+        ? "Large prompt; ensure you're using a 128k+ context model."
+        : "";
 
   if (loading && !rootNode) {
     return (
@@ -2948,9 +2877,7 @@ const App: React.FC<AppProps> = ({ initialRootDir }) => {
           flexDirection="column"
         >
           <Box justifyContent="space-between">
-            <Text dimColor>
-              [J/K] Scroll  [Space/B] Page  [Y] Copy  [W] Save  [Esc/Q] Back
-            </Text>
+            <Text dimColor>[J/K] Scroll [Space/B] Page [Y] Copy [W] Save [Esc/Q] Back</Text>
             {combined && (
               <Text>
                 {formatBytes(combined.bytes)} | Lines: {combined.lines} | Tokens:{" "}
@@ -2961,19 +2888,12 @@ const App: React.FC<AppProps> = ({ initialRootDir }) => {
           {combined && (
             <Box marginTop={1} flexDirection="column">
               <ProgressBar
-                percent={Math.min(
-                  1,
-                  combined.tokens / CONTEXT_WINDOW
-                )}
-                color={
-                  combined.tokens > CONTEXT_WINDOW ? "red" : "green"
-                }
+                percent={Math.min(1, combined.tokens / CONTEXT_WINDOW)}
+                color={combined.tokens > CONTEXT_WINDOW ? "red" : "green"}
               />
               <Text dimColor>
-                {Math.round(
-                  (combined.tokens / CONTEXT_WINDOW) * 1000
-                ) / 10}
-                % of {CONTEXT_WINDOW.toLocaleString()}-token context
+                {Math.round((combined.tokens / CONTEXT_WINDOW) * 1000) / 10}% of{" "}
+                {CONTEXT_WINDOW.toLocaleString()}-token context
               </Text>
             </Box>
           )}
@@ -2983,11 +2903,7 @@ const App: React.FC<AppProps> = ({ initialRootDir }) => {
           {focusField === "exportPath" && (
             <Box marginTop={1}>
               <Text>Save as: </Text>
-              <TextInput
-                value={exportPath}
-                onChange={setExportPath}
-                focus={true}
-              />
+              <TextInput value={exportPath} onChange={setExportPath} focus={true} />
             </Box>
           )}
         </Box>
@@ -3009,19 +2925,10 @@ const App: React.FC<AppProps> = ({ initialRootDir }) => {
 
       <Box marginBottom={1}>
         <Text>Root: </Text>
-        <TextInput
-          value={rootDir}
-          onChange={setRootDir}
-          focus={focusField === "rootDir"}
-        />
+        <TextInput value={rootDir} onChange={setRootDir} focus={focusField === "rootDir"} />
       </Box>
 
-      <Box
-        flexDirection="column"
-        flexGrow={1}
-        borderStyle="round"
-        borderColor="gray"
-      >
+      <Box flexDirection="column" flexGrow={1} borderStyle="round" borderColor="gray">
         <Box flexDirection="row" flexGrow={1}>
           {/* Explorer */}
           <Box
@@ -3045,12 +2952,7 @@ const App: React.FC<AppProps> = ({ initialRootDir }) => {
               </Text>
             </Box>
 
-            <Box
-              borderBottom
-              borderStyle="single"
-              borderColor="gray"
-              paddingX={1}
-            >
+            <Box borderBottom borderStyle="single" borderColor="gray" paddingX={1}>
               <Text color="cyan">Filter: </Text>
               <TextInput
                 value={filter}
@@ -3071,63 +2973,63 @@ const App: React.FC<AppProps> = ({ initialRootDir }) => {
                   accentColor="cyan"
                   totalItems={visibleNodes.length}
                 >
-	                  {visibleNodes
-	                    .slice(scrollOffset, scrollOffset + listHeight)
-	                    .map((node, sliceIdx) => {
-	                      const globalIdx = scrollOffset + sliceIdx;
-	                      const isCursor = globalIdx === cursor;
-	                      const isSel = selected.has(node.path);
-	                      const marker = isCursor ? ">" : " ";
-	                      const indent = filter.trim() ? 0 : node.depth;
-	                      const isLargeText = isLargeTextNode(node);
-	                      const isTooLarge =
-	                        !node.isDirectory && node.isText && node.sizeBytes > MAX_INCLUDE_BYTES;
-	                      const icon = node.isDirectory
-	                        ? expanded.has(node.path)
-	                          ? "[-]"
-	                          : "[+]"
-	                        : isSel
-	                        ? "[x]"
-	                        : node.isText
-	                        ? isTooLarge
-	                          ? "[!]"
-	                          : isLargeText
-	                          ? "[~]"
-	                          : "[ ]"
-	                        : "[!]";
-	
-	                      let color: any = node.isDirectory
-	                        ? "yellow"
-	                        : node.isText
-	                        ? isSel
-	                          ? "green"
-	                          : isTooLarge
-	                          ? "yellow"
-	                          : isLargeText
-	                          ? "cyan"
-	                          : "white"
-	                        : "red";
-	
-	                      if (isCursor) color = "cyan";
-	                      const lineCountLabel =
-	                        node.numLines >= 0 ? node.numLines.toLocaleString() : "?";
-	                      const label =
-	                        filter.trim() && node.relPath !== "." ? node.relPath : node.name;
-	
-	                      return (
-	                        <Box key={node.path}>
-	                          <Text color={isCursor ? "cyan" : "gray"}>{marker}</Text>
-	                          <Text dimColor>{" ".repeat(indent)}</Text>
-	                          <Text color={color}>
-	                            {icon} {label}{" "}
-	                            {!node.isDirectory &&
-	                              `(${formatBytes(node.sizeBytes)}${
-	                                node.isText ? ` | ${lineCountLabel} lines` : ", binary"
-	                              })`}
-	                          </Text>
-	                        </Box>
-	                      );
-	                    })}
+                  {visibleNodes
+                    .slice(scrollOffset, scrollOffset + listHeight)
+                    .map((node, sliceIdx) => {
+                      const globalIdx = scrollOffset + sliceIdx;
+                      const isCursor = globalIdx === cursor;
+                      const isSel = selected.has(node.path);
+                      const marker = isCursor ? ">" : " ";
+                      const indent = filter.trim() ? 0 : node.depth;
+                      const isLargeText = isLargeTextNode(node);
+                      const isTooLarge =
+                        !node.isDirectory && node.isText && node.sizeBytes > MAX_INCLUDE_BYTES;
+                      const icon = node.isDirectory
+                        ? expanded.has(node.path)
+                          ? "[-]"
+                          : "[+]"
+                        : isSel
+                          ? "[x]"
+                          : node.isText
+                            ? isTooLarge
+                              ? "[!]"
+                              : isLargeText
+                                ? "[~]"
+                                : "[ ]"
+                            : "[!]";
+
+                      let color: any = node.isDirectory
+                        ? "yellow"
+                        : node.isText
+                          ? isSel
+                            ? "green"
+                            : isTooLarge
+                              ? "yellow"
+                              : isLargeText
+                                ? "cyan"
+                                : "white"
+                          : "red";
+
+                      if (isCursor) color = "cyan";
+                      const lineCountLabel =
+                        node.numLines >= 0 ? node.numLines.toLocaleString() : "?";
+                      const label =
+                        filter.trim() && node.relPath !== "." ? node.relPath : node.name;
+
+                      return (
+                        <Box key={node.path}>
+                          <Text color={isCursor ? "cyan" : "gray"}>{marker}</Text>
+                          <Text dimColor>{" ".repeat(indent)}</Text>
+                          <Text color={color}>
+                            {icon} {label}{" "}
+                            {!node.isDirectory &&
+                              `(${formatBytes(node.sizeBytes)}${
+                                node.isText ? ` | ${lineCountLabel} lines` : ", binary"
+                              })`}
+                          </Text>
+                        </Box>
+                      );
+                    })}
                 </ScrollableBox>
               )}
             </Box>
@@ -3157,10 +3059,7 @@ const App: React.FC<AppProps> = ({ initialRootDir }) => {
               >
                 <Text bold={configTab === "presets"}>Presets</Text>
               </Box>
-              <Box
-                paddingX={1}
-                borderColor={configTab === "options" ? "cyan" : "gray"}
-              >
+              <Box paddingX={1} borderColor={configTab === "options" ? "cyan" : "gray"}>
                 <Text bold={configTab === "options"}>Options</Text>
               </Box>
             </Box>
@@ -3189,9 +3088,7 @@ const App: React.FC<AppProps> = ({ initialRootDir }) => {
 
                 <Text bold>
                   Goal{" "}
-                  <Text color={includeGoal ? "green" : "red"}>
-                    [{includeGoal ? "ON" : "OFF"}]
-                  </Text>
+                  <Text color={includeGoal ? "green" : "red"}>[{includeGoal ? "ON" : "OFF"}]</Text>
                 </Text>
                 <Box
                   borderStyle="single"
@@ -3208,7 +3105,7 @@ const App: React.FC<AppProps> = ({ initialRootDir }) => {
 
                 <Box marginTop={1}>
                   <Text dimColor>
-                    [P] Focus preamble  [G] Focus goal  [Ctrl+E] $EDITOR (multiline)
+                    [P] Focus preamble [G] Focus goal [Ctrl+E] $EDITOR (multiline)
                   </Text>
                 </Box>
               </Box>
@@ -3247,9 +3144,7 @@ const App: React.FC<AppProps> = ({ initialRootDir }) => {
                     />
                   </Box>
                   <Box marginTop={1} flexDirection="column">
-                    <Text dimColor>
-                      [J/K] Move  [L] Load  [D] Delete  [S] Focus name + save
-                    </Text>
+                    <Text dimColor>[J/K] Move [L] Load [D] Delete [S] Focus name + save</Text>
                   </Box>
                 </Box>
               </Box>
@@ -3266,9 +3161,7 @@ const App: React.FC<AppProps> = ({ initialRootDir }) => {
                 </Text>
                 <Text>
                   Include goal:{" "}
-                  <Text color={includeGoal ? "green" : "red"}>
-                    {includeGoal ? "ON" : "OFF"}
-                  </Text>{" "}
+                  <Text color={includeGoal ? "green" : "red"}>{includeGoal ? "ON" : "OFF"}</Text>{" "}
                   (toggle with [O])
                 </Text>
                 <Text>
@@ -3279,10 +3172,7 @@ const App: React.FC<AppProps> = ({ initialRootDir }) => {
                   (toggle with [X])
                 </Text>
                 <Text>
-                  Minify:{" "}
-                  <Text color={minify ? "green" : "red"}>
-                    {minify ? "ON" : "OFF"}
-                  </Text>{" "}
+                  Minify: <Text color={minify ? "green" : "red"}>{minify ? "ON" : "OFF"}</Text>{" "}
                   (toggle with [M])
                 </Text>
                 <Box marginTop={1}>
@@ -3323,8 +3213,7 @@ const App: React.FC<AppProps> = ({ initialRootDir }) => {
                 code={
                   previewContent
                     ? previewWindowText
-                    :
-                  "// Select a text file to preview (or press Ctrl+G to generate)."
+                    : "// Select a text file to preview (or press Ctrl+G to generate)."
                 }
               />
             </Box>
@@ -3337,10 +3226,7 @@ const App: React.FC<AppProps> = ({ initialRootDir }) => {
             >
               <Box justifyContent="space-between">
                 <Text>
-                  Tokens:{" "}
-                  <Text color="magenta">
-                    {statsTokens.toLocaleString()}
-                  </Text>
+                  Tokens: <Text color="magenta">{statsTokens.toLocaleString()}</Text>
                 </Text>
                 <Text color="green">${cost.toFixed(4)}</Text>
               </Box>
@@ -3349,20 +3235,16 @@ const App: React.FC<AppProps> = ({ initialRootDir }) => {
                 color={statsTokens > CONTEXT_WINDOW ? "red" : "green"}
               />
               <Text dimColor>
-                {Math.round(contextPercent * 1000) / 10}% of{" "}
-                {CONTEXT_WINDOW.toLocaleString()}-token context
+                {Math.round(contextPercent * 1000) / 10}% of {CONTEXT_WINDOW.toLocaleString()}-token
+                context
               </Text>
-              {contextWarning && (
-                <Text color="yellow">{contextWarning}</Text>
-              )}
+              {contextWarning && <Text color="yellow">{contextWarning}</Text>}
               <Box marginTop={1} flexDirection="column">
                 <Text>
-                  Size: {formatBytes(statsSizeBytes)} | Lines:{" "}
-                  {statsLineCount.toLocaleString()} | Files: {statsFileCount}
+                  Size: {formatBytes(statsSizeBytes)} | Lines: {statsLineCount.toLocaleString()} |
+                  Files: {statsFileCount}
                 </Text>
-                <Text dimColor>
-                  Press Ctrl+G to generate combined prompt.
-                </Text>
+                <Text dimColor>Press Ctrl+G to generate combined prompt.</Text>
               </Box>
             </Box>
           </Box>
@@ -3386,7 +3268,7 @@ const App: React.FC<AppProps> = ({ initialRootDir }) => {
                 Ln {promptSampleScrollOffset + 1}-
                 {Math.min(
                   promptSampleScrollOffset + promptSampleCodeHeight,
-                  promptPreviewLines.length
+                  promptPreviewLines.length,
                 )}{" "}
                 / {promptPreviewLines.length}
               </Text>
@@ -3396,9 +3278,7 @@ const App: React.FC<AppProps> = ({ initialRootDir }) => {
           </Box>
 
           {promptSampleCollapsed ? (
-            <Text dimColor>
-              Collapsed. Press z to expand. (Tab to focus pane)
-            </Text>
+            <Text dimColor>Collapsed. Press z to expand. (Tab to focus pane)</Text>
           ) : (
             <>
               <Text dimColor>
@@ -3431,21 +3311,23 @@ const App: React.FC<AppProps> = ({ initialRootDir }) => {
       >
         <Box flexDirection="column">
           <Text dimColor>
-            F1/?: Help | Tab: Panes | Explorer: j/k, h/l, Space/Enter, / filter, D root, T/1-9/0/R quick select
+            F1/?: Help | Tab: Panes | Explorer: j/k, h/l, Space/Enter, / filter, D root, T/1-9/0/R
+            quick select
           </Text>
           <Text dimColor>
-            Config: arrows, P/G/I/O/X/M, S/L/D, Ctrl+E: $EDITOR | Sample: z, j/k | Ctrl+G: Generate | Esc: Quit (2x)
+            Config: arrows, P/G/I/O/X/M, S/L/D, Ctrl+E: $EDITOR | Sample: z, j/k | Ctrl+G: Generate
+            | Esc: Quit (2x)
           </Text>
         </Box>
         <Box alignItems="flex-end">
           {confirmExit ? (
-            <Text color="yellow" bold>Press Esc again to quit</Text>
+            <Text color="yellow" bold>
+              Press Esc again to quit
+            </Text>
           ) : scanError ? (
             <Text color="red">Error: {scanError}</Text>
           ) : (
-            <Text color={status.startsWith("Ready") ? "white" : "green"}>
-              {status}
-            </Text>
+            <Text color={status.startsWith("Ready") ? "white" : "green"}>{status}</Text>
           )}
         </Box>
       </Box>

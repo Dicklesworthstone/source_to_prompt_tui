@@ -1,4 +1,4 @@
-declare module 'csso' {
+declare module "csso" {
   interface MinifyResult {
     css: string;
   }
@@ -6,7 +6,7 @@ declare module 'csso' {
   export function minify(source: string, options?: object): MinifyResult;
 }
 
-declare module 'html-minifier-terser' {
+declare module "html-minifier-terser" {
   interface MinifyOptions {
     collapseWhitespace?: boolean;
     removeComments?: boolean;
@@ -19,8 +19,8 @@ declare module 'html-minifier-terser' {
   export function minify(html: string, options?: MinifyOptions): Promise<string>;
 }
 
-declare module 'ink-syntax-highlight' {
-  import { FC } from 'react';
+declare module "ink-syntax-highlight" {
+  import { FC } from "react";
 
   interface SyntaxHighlightProps {
     language?: string;
