@@ -1,14 +1,4 @@
 #!/usr/bin/env pwsh
-Set-StrictMode -Version Latest
-$ErrorActionPreference = 'Stop'
-
-try {
-  # GitHub requires TLS 1.2+. Older Windows PowerShell defaults may exclude it.
-  [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
-} catch {
-  # Ignore if unavailable (PowerShell 7+ on some platforms).
-}
-
 param(
   [string]$Version = '',
   [string]$Owner = 'Dicklesworthstone',
@@ -19,6 +9,16 @@ param(
   [switch]$Verify,
   [switch]$Quiet
 )
+
+Set-StrictMode -Version Latest
+$ErrorActionPreference = 'Stop'
+
+try {
+  # GitHub requires TLS 1.2+. Older Windows PowerShell defaults may exclude it.
+  [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
+} catch {
+  # Ignore if unavailable (PowerShell 7+ on some platforms).
+}
 
 function Write-Log {
   param([string]$Message)
