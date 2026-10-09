@@ -25,9 +25,9 @@ function Write-Log {
   if (-not $Quiet) { Write-Host $Message }
 }
 
-function Write-Info { param([string]$Message) Write-Log ("→ {0}" -f $Message) }
-function Write-Ok { param([string]$Message) Write-Log ("✓ {0}" -f $Message) }
-function Write-Warn { param([string]$Message) Write-Log ("⚠ {0}" -f $Message) }
+function Write-Info { param([string]$Message) Write-Log ("[info] {0}" -f $Message) }
+function Write-Ok { param([string]$Message) Write-Log ("[ok] {0}" -f $Message) }
+function Write-Warn { param([string]$Message) Write-Log ("[warn] {0}" -f $Message) }
 
 function Get-InstallName {
   param([string]$Name)
