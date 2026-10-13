@@ -744,6 +744,7 @@ bun run build:bin    # Single-file binary for current platform
 bun run build:mac-arm64
 bun run build:mac-x64
 bun run build:linux-x64
+bun run build:linux-x64-baseline  # x86_64 CPUs without AVX2
 bun run build:linux-arm64
 bun run build:all    # All platforms
 ```
@@ -793,6 +794,7 @@ Each release includes:
 - `s2p-macos-arm64` — macOS Apple Silicon
 - `s2p-macos-x64` — macOS Intel
 - `s2p-linux-x64` — Linux x86_64
+- `s2p-linux-x64-baseline` — Linux x86_64 without AVX2 (the installer picks it automatically)
 - `s2p-linux-arm64` — Linux ARM64
 - `s2p-windows-x64.exe` — Windows x86_64
 - `*.sha256` — Individual checksums

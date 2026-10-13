@@ -125,7 +125,15 @@ detect_target() {
 
   ASSET=""
   case "${OS}-${ARCH}" in
-    linux-x86_64) ASSET="s2p-linux-x64" ;;
+    linux-x86_64)
+      ASSET="s2p-linux-x64"
+      # Bun's x64 runtime needs AVX2; without it the binary dies with SIGILL
+      # (exit 132) before printing anything.
+      if [ -r /proc/cpuinfo ] && ! grep -qw avx2 /proc/cpuinfo; then
+        ASSET="s2p-linux-x64-baseline"
+        info "CPU lacks AVX2; using the baseline build"
+      fi
+      ;;
     linux-aarch64) ASSET="s2p-linux-arm64" ;;
     darwin-arm64) ASSET="s2p-macos-arm64" ;;
     darwin-x86_64) ASSET="s2p-macos-x64" ;;
@@ -219,6 +227,13 @@ download_binary() {
     fi
   else
     warn "No sha256 utility found; skipping checksum verification"
+  fi
+
+  # Never replace a working install with a binary that cannot run here.
+  chmod 0755 "$TMP/${ASSET}"
+  if [ "${OS:-}" != "windows" ] && ! "$TMP/${ASSET}" --version >/dev/null 2>&1; then
+    err "Downloaded ${ASSET} does not run on this machine; ${DEST}/${INSTALL_NAME} left unchanged"
+    exit 1
   fi
 
   install -m 0755 "$TMP/${ASSET}" "$DEST/${INSTALL_NAME}"
