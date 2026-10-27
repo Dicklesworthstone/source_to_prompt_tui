@@ -135,6 +135,10 @@ function Ensure-DestOnPath {
 function Download-File {
   param([string]$Url, [string]$OutFile)
   Write-Info "Downloading $Url"
+  # Windows PowerShell 5.1 redraws its progress bar for every chunk, which stretches the
+  # ~100 MB binary download to minutes (#8). Assigned here, the preference is local to
+  # this function.
+  if ($PSVersionTable.PSVersion.Major -lt 6 -or $Quiet) { $ProgressPreference = 'SilentlyContinue' }
   Invoke-WebRequest -Uri $Url -OutFile $OutFile -Headers @{ 'User-Agent' = 's2p-installer' } | Out-Null
 }
 
