@@ -118,7 +118,7 @@ The installer automatically:
 - Falls back to building from source (requires git + Bun)
 - Verifies the SHA256 checksum
 - Installs to `~/.local/bin` (macOS/Linux) or `%LOCALAPPDATA%\\Programs\\s2p\\bin` (Windows), or your specified directory
-- Ensures the install directory is on PATH (shell rc update on macOS/Linux; user PATH update on Windows)
+- Ensures the install directory is on PATH (shell rc update on macOS/Linux; user PATH update on Windows, skipped with `-NoPathUpdate`)
 
 ---
 

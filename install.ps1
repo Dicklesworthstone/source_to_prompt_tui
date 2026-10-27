@@ -7,7 +7,8 @@ param(
   [string]$Dest = '',
   [switch]$FromSource,
   [switch]$Verify,
-  [switch]$Quiet
+  [switch]$Quiet,
+  [switch]$NoPathUpdate
 )
 
 Set-StrictMode -Version Latest
@@ -58,36 +59,77 @@ function Resolve-LatestVersion {
   return ''
 }
 
-function Ensure-DestOnPath {
-  param([string]$Dir)
+function Test-SamePathEntry {
+  param([string]$Entry, [string]$Dir)
+  $a = [Environment]::ExpandEnvironmentVariables($Entry.Trim()).TrimEnd('\')
+  $b = [Environment]::ExpandEnvironmentVariables($Dir.Trim()).TrimEnd('\')
+  return ($a.Length -gt 0 -and $a.Equals($b, [StringComparison]::OrdinalIgnoreCase))
+}
 
-  $dirNorm = $Dir.TrimEnd('\')
-  if ([string]::IsNullOrWhiteSpace($dirNorm)) { return }
-
-  $userPath = [Environment]::GetEnvironmentVariable('Path', 'User')
-  $existing = @()
-  if (-not [string]::IsNullOrWhiteSpace($userPath)) {
-    $existing = $userPath.Split(';') | ForEach-Object { $_.Trim() } | Where-Object { $_ -ne '' }
-  }
-
-  $already = $false
-  foreach ($p in $existing) {
-    if ($p.TrimEnd('\').Equals($dirNorm, [StringComparison]::OrdinalIgnoreCase)) {
-      $already = $true
-      break
+function Send-EnvironmentChange {
+  # A registry write alone does not tell Explorer, so terminals opened from it would
+  # keep the old PATH until the next sign-in.
+  try {
+    if (-not ('S2PInstaller.NativeMethods' -as [type])) {
+      Add-Type -Namespace S2PInstaller -Name NativeMethods -MemberDefinition @'
+[DllImport("user32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
+public static extern IntPtr SendMessageTimeout(IntPtr hWnd, uint msg, UIntPtr wParam, string lParam, uint flags, uint timeout, out UIntPtr result);
+'@
     }
+    $result = [UIntPtr]::Zero
+    # HWND_BROADCAST, WM_SETTINGCHANGE, SMTO_ABORTIFHUNG, 5 s per window
+    [void][S2PInstaller.NativeMethods]::SendMessageTimeout([IntPtr]0xffff, 0x1A, [UIntPtr]::Zero, 'Environment', 2, 5000, [ref]$result)
+    return $true
+  } catch {
+    return $false
+  }
+}
+
+function Ensure-DestOnPath {
+  # $EnvKey and -NoBroadcast exist for scripts/test-install-ps1.ps1, which points this at
+  # a throwaway registry key instead of the real user environment.
+  param([string]$Dir, [Microsoft.Win32.RegistryKey]$EnvKey = $null, [switch]$NoBroadcast)
+
+  if ([string]::IsNullOrWhiteSpace($Dir.Trim().TrimEnd('\'))) { return }
+
+  # Work on the raw registry value. [Environment]::GetEnvironmentVariable expands %VAR%
+  # references and SetEnvironmentVariable writes REG_SZ, so a round trip through them
+  # would permanently flatten every expandable entry already on the user's PATH (#9).
+  $ownKey = $null -eq $EnvKey
+  if ($ownKey) { $EnvKey = [Microsoft.Win32.Registry]::CurrentUser.CreateSubKey('Environment') }
+  try {
+    $raw = ''
+    $kind = [Microsoft.Win32.RegistryValueKind]::ExpandString
+    if ($EnvKey.GetValueNames() -contains 'Path') {
+      $kind = $EnvKey.GetValueKind('Path')
+      $raw = [string]$EnvKey.GetValue('Path', '', [Microsoft.Win32.RegistryValueOptions]::DoNotExpandEnvironmentNames)
+    }
+    if ($kind -ne [Microsoft.Win32.RegistryValueKind]::String -and $kind -ne [Microsoft.Win32.RegistryValueKind]::ExpandString) {
+      Write-Warn "Your user PATH is stored as $kind, so it was left alone. Add $Dir to PATH yourself."
+      return
+    }
+
+    foreach ($entry in $raw.Split(';')) {
+      if (Test-SamePathEntry -Entry $entry -Dir $Dir) {
+        Write-Ok "$Dir is already on PATH"
+        return
+      }
+    }
+
+    # Append to the existing text unchanged, keeping its registry type.
+    $sep = if ($raw.Length -eq 0 -or $raw.EndsWith(';')) { '' } else { ';' }
+    $EnvKey.SetValue('Path', $raw + $sep + $Dir, $kind)
+  } finally {
+    if ($ownKey) { $EnvKey.Close() }
   }
 
-  if ($already) {
-    Write-Ok "$Dir is already on PATH"
-    return
-  }
-
-  $newUserPath = if ($existing.Count -gt 0) { ($existing + $Dir) -join ';' } else { $Dir }
-  [Environment]::SetEnvironmentVariable('Path', $newUserPath, 'User')
   $env:Path = "$Dir;$env:Path"
   Write-Ok "PATH updated for your user account"
-  Write-Info "Restart your terminal to pick up the PATH change"
+  if ($NoBroadcast -or (Send-EnvironmentChange)) {
+    Write-Info "Restart your terminal to pick up the PATH change"
+  } else {
+    Write-Warn "Could not notify running programs; sign out and back in if a new terminal cannot find $Binary"
+  }
 }
 
 function Download-File {
@@ -188,7 +230,11 @@ try {
   try { Unblock-File -Path $destPath -ErrorAction SilentlyContinue } catch {}
   Write-Ok "Installed $installName to $Dest"
 
-  Ensure-DestOnPath -Dir $Dest
+  if ($NoPathUpdate) {
+    Write-Info "Left PATH unchanged (-NoPathUpdate); add $Dest to PATH to run $Binary by name"
+  } else {
+    Ensure-DestOnPath -Dir $Dest
+  }
   Write-Ok "Done. Run: $Binary"
 } finally {
   Remove-Item -Force -ErrorAction SilentlyContinue $tmpFile
