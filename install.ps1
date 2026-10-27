@@ -145,7 +145,11 @@ function Download-File {
 function Maybe-VerifySha256 {
   param([string]$FilePath, [string]$ShaUrl, [switch]$Require)
   try {
-    $shaText = (Invoke-WebRequest -Uri $ShaUrl -Headers @{ 'User-Agent' = 's2p-installer' }).Content
+    # GitHub serves the sidecar as application/octet-stream, so both PowerShells return its
+    # Content as bytes, and Windows PowerShell 5.1 without -UseBasicParsing throws a
+    # NullReferenceException before that. Either way no checksum was ever compared.
+    $resp = Invoke-WebRequest -Uri $ShaUrl -UseBasicParsing -Headers @{ 'User-Agent' = 's2p-installer' }
+    $shaText = if ($resp.Content -is [byte[]]) { [Text.Encoding]::ASCII.GetString($resp.Content) } else { [string]$resp.Content }
     $expected = ($shaText -split '\s+')[0].Trim()
     if ($expected -notmatch '^[0-9a-fA-F]{64}$') {
       throw "Checksum file did not contain a SHA256 hash"
