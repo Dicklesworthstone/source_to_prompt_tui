@@ -113,10 +113,11 @@ s2p --help
 ```
 
 The installer automatically:
+
 - Detects your platform (macOS arm64/x64, Linux x64/arm64, Windows x64)
-- Downloads the appropriate pre-built binary (when available)
-- Falls back to building from source (requires git + Bun)
-- Verifies the SHA256 checksum
+- Resolves the latest release once, or uses your requested version
+- Downloads the appropriate pre-built binary and checks its available SHA256 sidecar
+- Builds the selected release ref from source when its binary is missing and verification is optional (requires git + Bun)
 - Installs to `~/.local/bin` (macOS/Linux) or `%LOCALAPPDATA%\\Programs\\s2p\\bin` (Windows), or your specified directory
 - Ensures the install directory is on PATH (shell rc update on macOS/Linux; user PATH update on Windows, skipped with `-NoPathUpdate`)
 
@@ -632,14 +633,25 @@ s2p collects no analytics, usage data, or telemetry of any kind. There are no cr
 
 ### Installation Security
 
-The installer verifies downloaded binaries using SHA256 checksums:
+Both installers check release checksum metadata before copying a downloaded binary to its destination. A checksum mismatch, an empty or malformed sidecar, multiple checksum records, or a record naming a different asset is always fatal, including when verification was not explicitly requested.
+
+| Installation mode | Integrity behavior |
+|-------------------|--------------------|
+| Default release download | A missing default sidecar (HTTP 404/410) produces a warning. Supplied metadata must be valid and match the downloaded bytes; a SHA256 utility must be available. |
+| `--verify` / `-Verify` | Requires a successful SHA256 comparison. Missing metadata, missing hashing support, and hashing failures stop installation. Source fallback is disabled. |
+| Unix `CHECKSUM_URL` override | Makes verification required, including when `--verify` is omitted. An unavailable override cannot silently disable verification. |
+| `--from-source` / `-FromSource` | Fetches the requested release tag, or full commit ID, checks out that commit, and reports it before building. This mode cannot be combined with required release checksum verification. |
+
+Interrupted transfers, HTTP errors other than an optional artifact's 404/410, and destination write failures stop installation without a completion message. Automatic source fallback only applies to an unavailable release binary or an unsupported platform when verification is optional. It builds the already selected release ref and does not compare the resulting executable with a prebuilt release's checksum. If the latest release cannot be resolved, specify `--version` / `-Version`; the installers never substitute the default branch.
+
+For a required, pinned release check:
 
 ```bash
-# Checksums are generated in CI and uploaded alongside binaries
-sha256sum s2p-macos-arm64 > s2p-macos-arm64.sha256
+bash install.sh --version v0.3.4 --verify
+```
 
-# Installer verifies before installing
-echo "${expected}  ${file}" | sha256sum -c -
+```powershell
+.\install.ps1 -Version v0.3.4 -Verify
 ```
 
 You can also verify manually:
@@ -749,6 +761,21 @@ bun run build:linux-arm64
 bun run build:all    # All platforms
 ```
 
+### Installer Regression Tests
+
+```bash
+# Unix: Python 3.9+, Bash, curl, OpenSSL, git, and Bun on PATH
+python3 scripts/test-install-sh.py
+```
+
+```powershell
+# Run both on Windows; git and Bun enable the pinned-source build cases
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\test-install-ps1.ps1
+pwsh -NoProfile -File scripts\test-install-ps1.ps1
+```
+
+These suites exercise real local HTTP transfers, native hashing and destination writes, and local Git repositories whose release tags differ from their default branches. They cover mismatched and malformed checksums, absent hashing tools, interrupted responses, failed writes, and source-build failures. Each suite prints its retained fixture directory; the Unix suite also writes a log for each installer run. PowerShell integrity checks also run on Unix; Windows registry, environment-broadcast, and file-sharing checks explicitly skip there and require a native Windows run.
+
 ### Project Structure
 
 ```
@@ -827,7 +854,7 @@ CI automatically builds and publishes the release.
 | `OWNER` | GitHub owner (default: `Dicklesworthstone`) |
 | `REPO` | GitHub repo (default: `source_to_prompt_tui`) |
 | `BINARY` | Installed binary name (default: `s2p`) |
-| `CHECKSUM_URL` | Override checksum location |
+| `CHECKSUM_URL` | Override checksum location and require a successful comparison (Unix) |
 
 ### Installer Flags
 
@@ -838,9 +865,9 @@ Options:
   --version vX.Y.Z   Install specific version
   --dest DIR         Install directory
   --system           Install to /usr/local/bin
-  --from-source      Build from source instead of downloading
+  --from-source      Build the requested release tag or full commit ID
   --quiet, -q        Suppress output
-  --verify           Require checksum verification
+  --verify           Require a release checksum comparison; disable source fallback
 ```
 
 ---

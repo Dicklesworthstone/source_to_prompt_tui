@@ -49,7 +49,7 @@ function Resolve-LatestVersion {
   $latestUrl = "https://api.github.com/repos/$OwnerParam/$RepoParam/releases/latest"
   Write-Info "Resolving latest version..."
   try {
-    $resp = Invoke-RestMethod -Uri $latestUrl -Headers @{ 'Accept' = 'application/vnd.github+json' }
+    $resp = Invoke-RestMethod -Uri $latestUrl -TimeoutSec 60 -Headers @{ 'Accept' = 'application/vnd.github+json'; 'User-Agent' = 's2p-installer' }
     if ($null -ne $resp -and -not [string]::IsNullOrWhiteSpace($resp.tag_name)) {
       return [string]$resp.tag_name
     }
@@ -139,36 +139,66 @@ function Download-File {
   # ~100 MB binary download to minutes (#8). Assigned here, the preference is local to
   # this function.
   if ($PSVersionTable.PSVersion.Major -lt 6 -or $Quiet) { $ProgressPreference = 'SilentlyContinue' }
-  Invoke-WebRequest -Uri $Url -OutFile $OutFile -Headers @{ 'User-Agent' = 's2p-installer' } | Out-Null
+  Invoke-WebRequest -Uri $Url -OutFile $OutFile -UseBasicParsing -TimeoutSec 600 -Headers @{ 'User-Agent' = 's2p-installer' } | Out-Null
+}
+
+function Test-HttpNotFound {
+  param([System.Management.Automation.ErrorRecord]$Failure)
+  # Windows PowerShell uses WebException; PowerShell 7 uses HttpResponseException.
+  # Neither transport failures nor local file errors establish that an asset is absent.
+  try {
+    $status = [int]$Failure.Exception.Response.StatusCode
+    return ($status -eq 404 -or $status -eq 410)
+  } catch {
+    return $false
+  }
 }
 
 function Maybe-VerifySha256 {
-  param([string]$FilePath, [string]$ShaUrl, [switch]$Require)
+  param([string]$FilePath, [string]$ShaUrl, [switch]$Require,
+    [string]$ExpectedName = 's2p-windows-x64.exe')
   try {
     # GitHub serves the sidecar as application/octet-stream, so both PowerShells return its
     # Content as bytes, and Windows PowerShell 5.1 without -UseBasicParsing throws a
     # NullReferenceException before that. Either way no checksum was ever compared.
-    $resp = Invoke-WebRequest -Uri $ShaUrl -UseBasicParsing -Headers @{ 'User-Agent' = 's2p-installer' }
-    $shaText = if ($resp.Content -is [byte[]]) { [Text.Encoding]::ASCII.GetString($resp.Content) } else { [string]$resp.Content }
-    $expected = ($shaText -split '\s+')[0].Trim()
-    if ($expected -notmatch '^[0-9a-fA-F]{64}$') {
-      throw "Checksum file did not contain a SHA256 hash"
-    }
-    $actual = (Get-FileHash -Path $FilePath -Algorithm SHA256).Hash.ToLowerInvariant()
-    if ($actual -ne $expected.ToLowerInvariant()) {
-      throw "Checksum mismatch"
-    }
-    Write-Ok "Checksum verified"
+    $resp = Invoke-WebRequest -Uri $ShaUrl -UseBasicParsing -TimeoutSec 60 -Headers @{ 'User-Agent' = 's2p-installer' }
   } catch {
-    if ($Require) { throw }
-    Write-Warn "Checksum could not be verified; continuing without verification"
+    if (-not $Require -and (Test-HttpNotFound -Failure $_)) {
+      Write-Warn "Checksum not available; proceeding without verification"
+      return
+    }
+    throw
   }
+
+  # Only missing optional metadata is recoverable. Once supplied, its syntax and digest
+  # must be checked, even when -Verify was not specified.
+  $shaText = if ($resp.Content -is [byte[]]) { [Text.Encoding]::ASCII.GetString($resp.Content) } else { [string]$resp.Content }
+  Assert-Sha256Checksum -FilePath $FilePath -ShaText $shaText -ExpectedName $ExpectedName
+}
+
+function Assert-Sha256Checksum {
+  param([string]$FilePath, [string]$ShaText, [string]$ExpectedName = 's2p-windows-x64.exe')
+  $record = [regex]::Match($ShaText.Trim(), '\A([0-9a-fA-F]{64})(?:[ \t]+\*?([^ \t\r\n]+))?[ \t]*\z')
+  if (-not $record.Success) { throw "Checksum file must contain one valid SHA256 record" }
+  if ($record.Groups[2].Success -and $record.Groups[2].Value -cne $ExpectedName) {
+    throw "Checksum filename does not match release asset $ExpectedName"
+  }
+  $expected = $record.Groups[1].Value.ToLowerInvariant()
+  if (-not (Get-Command Get-FileHash -ErrorAction SilentlyContinue)) {
+    throw "SHA256 verification requires Get-FileHash, but it is unavailable"
+  }
+  $actual = (Get-FileHash -LiteralPath $FilePath -Algorithm SHA256).Hash
+  if ($actual -notmatch '\A[0-9a-fA-F]{64}\z') { throw "SHA256 hashing did not return a valid digest" }
+  if ($actual.ToLowerInvariant() -ne $expected) { throw "Checksum mismatch" }
+  Write-Ok "Checksum verified"
 }
 
 function Build-From-Source {
-  param([string]$OwnerParam, [string]$RepoParam, [string]$OutFile)
+  param([string]$OwnerParam, [string]$RepoParam, [string]$VersionParam, [string]$OutFile)
 
-  Write-Info "Building from source (requires git + bun)"
+  $OutFile = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($OutFile)
+  if ([string]::IsNullOrWhiteSpace($VersionParam)) { throw "A resolved release version is required for a source build; specify -Version" }
+  Write-Info "Building $VersionParam from source (requires git + bun)"
   if (-not (Get-Command git -ErrorAction SilentlyContinue)) { throw "git is required but was not found on PATH" }
   if (-not (Get-Command bun -ErrorAction SilentlyContinue)) { throw "bun is required but was not found on PATH" }
 
@@ -177,20 +207,80 @@ function Build-From-Source {
   $srcDir = Join-Path -Path $tmpRoot -ChildPath 'src'
 
   try {
-    git clone --depth 1 "https://github.com/$OwnerParam/$RepoParam.git" $srcDir | Out-Null
+    # Fetch the exact tag (not a same-named branch), or a full commit ID. A failed fetch
+    # must never fall through to building the repository's default branch.
+    $sourceRef = if ($VersionParam -match '\A[0-9a-fA-F]{40}\z') { $VersionParam } else { "refs/tags/$VersionParam" }
+    if ($sourceRef -like 'refs/*') {
+      git check-ref-format $sourceRef | Out-Null
+      if ($LASTEXITCODE -ne 0) { throw "Invalid release ref: $VersionParam" }
+    }
+    git init --quiet $srcDir | Out-Null
+    if ($LASTEXITCODE -ne 0) { throw "Could not initialize source checkout" }
+    git -C $srcDir fetch --quiet --no-tags --depth 1 "https://github.com/$OwnerParam/$RepoParam.git" $sourceRef | Out-Null
+    if ($LASTEXITCODE -ne 0) { throw "Could not fetch requested release ref $VersionParam" }
+    $sourceCommit = git -C $srcDir rev-parse --verify 'FETCH_HEAD^{commit}'
+    if ($LASTEXITCODE -ne 0 -or $sourceCommit -notmatch '\A[0-9a-fA-F]{40}\z') { throw "Requested release ref did not resolve to a commit" }
+    git -C $srcDir checkout --quiet --detach $sourceCommit | Out-Null
+    if ($LASTEXITCODE -ne 0) { throw "Could not check out release commit $sourceCommit" }
+    Write-Info "Source provenance: $VersionParam at commit $sourceCommit; release binary checksum does not apply"
     Push-Location $srcDir
     try {
       bun install --frozen-lockfile | Out-Null
+      if ($LASTEXITCODE -ne 0) { throw "Dependency installation failed" }
       bun run build:win-x64 | Out-Null
+      if ($LASTEXITCODE -ne 0) { throw "Source build failed" }
     } finally {
       Pop-Location
     }
 
     $built = Join-Path -Path $srcDir -ChildPath 'dist\s2p-windows-x64.exe'
     if (-not (Test-Path -Path $built -PathType Leaf)) { throw "Build failed; expected output not found: $built" }
-    Copy-Item -Force -Path $built -Destination $OutFile
+    [System.IO.File]::Copy($built, $OutFile, $true)
   } finally {
     Remove-Item -Recurse -Force -ErrorAction SilentlyContinue $tmpRoot
+  }
+}
+
+function Install-Artifact {
+  param([string]$BaseUrl, [string]$ShaUrl, [string]$DestPath,
+    [string]$OwnerParam, [string]$RepoParam, [string]$VersionParam,
+    [switch]$SourceRequested, [switch]$Require)
+
+  $DestPath = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($DestPath)
+  if ($Require -and $SourceRequested) {
+    throw "-Verify requires a release binary checksum comparison and cannot be combined with a source build"
+  }
+  $tmpFile = Join-Path -Path ([System.IO.Path]::GetTempPath()) -ChildPath ("s2p-" + [Guid]::NewGuid().ToString('N') + '.exe')
+  $sourceBuilt = [bool]$SourceRequested
+  try {
+    if (-not $sourceBuilt) {
+      try {
+        Download-File -Url $BaseUrl -OutFile $tmpFile
+      } catch {
+        if (-not (Test-HttpNotFound -Failure $_)) { throw }
+        if ($Require) { throw "Release binary unavailable; -Verify forbids unverified source fallback" }
+        Write-Warn "Release binary unavailable; building requested release $VersionParam from source."
+        $sourceBuilt = $true
+      }
+    }
+    if ($sourceBuilt) {
+      Build-From-Source -OwnerParam $OwnerParam -RepoParam $RepoParam -VersionParam $VersionParam -OutFile $tmpFile
+    } else {
+      Maybe-VerifySha256 -FilePath $tmpFile -ShaUrl $ShaUrl -Require:$Require
+    }
+
+    if ((Get-Item -LiteralPath $tmpFile).Length -eq 0) { throw "Refusing to install an empty artifact" }
+    # File.Copy treats a directory at the destination as an error. Copy-Item would copy
+    # inside it and could report success despite leaving the requested executable absent.
+    [System.IO.File]::Copy($tmpFile, $DestPath, $true)
+    try { Unblock-File -LiteralPath $DestPath -ErrorAction SilentlyContinue } catch {}
+    if ($sourceBuilt) {
+      Write-Ok "Installed $DestPath (built from release $VersionParam source)"
+    } else {
+      Write-Ok "Installed $DestPath"
+    }
+  } finally {
+    Remove-Item -LiteralPath $tmpFile -Force -ErrorAction SilentlyContinue
   }
 }
 
@@ -213,37 +303,19 @@ if ([string]::IsNullOrWhiteSpace($Version)) {
   $resolved = Resolve-LatestVersion -OwnerParam $Owner -RepoParam $Repo
   if (-not [string]::IsNullOrWhiteSpace($resolved)) { $Version = $resolved }
 }
+if ([string]::IsNullOrWhiteSpace($Version)) {
+  throw "Could not resolve the latest release; specify -Version to install an exact release"
+}
 
-$tagPath = if ([string]::IsNullOrWhiteSpace($Version)) { 'latest/download' } else { "download/$Version" }
+$tagPath = 'download/' + [Uri]::EscapeDataString($Version)
 $asset = 's2p-windows-x64.exe'
 $baseUrl = "https://github.com/$Owner/$Repo/releases/$tagPath/$asset"
 $shaUrl = "$baseUrl.sha256"
 
-$tmpFile = Join-Path -Path ([System.IO.Path]::GetTempPath()) -ChildPath ("s2p-" + [Guid]::NewGuid().ToString('N') + '.exe')
-
-try {
-  if ($FromSource) {
-    Build-From-Source -OwnerParam $Owner -RepoParam $Repo -OutFile $tmpFile
-  } else {
-    try {
-      Download-File -Url $baseUrl -OutFile $tmpFile
-    } catch {
-      Write-Warn "Download failed; falling back to from-source build."
-      Build-From-Source -OwnerParam $Owner -RepoParam $Repo -OutFile $tmpFile
-    }
-    Maybe-VerifySha256 -FilePath $tmpFile -ShaUrl $shaUrl -Require:$Verify
-  }
-
-  Copy-Item -Force -Path $tmpFile -Destination $destPath
-  try { Unblock-File -Path $destPath -ErrorAction SilentlyContinue } catch {}
-  Write-Ok "Installed $installName to $Dest"
-
-  if ($NoPathUpdate) {
-    Write-Info "Left PATH unchanged (-NoPathUpdate); add $Dest to PATH to run $Binary by name"
-  } else {
-    Ensure-DestOnPath -Dir $Dest
-  }
-  Write-Ok "Done. Run: $Binary"
-} finally {
-  Remove-Item -Force -ErrorAction SilentlyContinue $tmpFile
+Install-Artifact -BaseUrl $baseUrl -ShaUrl $shaUrl -DestPath $destPath -OwnerParam $Owner -RepoParam $Repo -VersionParam $Version -SourceRequested:$FromSource -Require:$Verify
+if ($NoPathUpdate) {
+  Write-Info "Left PATH unchanged (-NoPathUpdate); add $Dest to PATH to run $Binary by name"
+} else {
+  Ensure-DestOnPath -Dir $Dest
 }
+Write-Ok "Done. Run: $Binary"
