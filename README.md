@@ -644,6 +644,8 @@ Both installers check release checksum metadata before copying a downloaded bina
 
 Interrupted transfers, HTTP errors other than an optional artifact's 404/410, and destination write failures stop installation without a completion message. Automatic source fallback only applies to an unavailable release binary or an unsupported platform when verification is optional. It builds the already selected release ref and does not compare the resulting executable with a prebuilt release's checksum. If the latest release cannot be resolved, specify `--version` / `-Version`; the installers never substitute the default branch.
 
+Upgrades prepare the replacement beside the destination, on the same filesystem, before publishing it. A partial copy cannot truncate the working executable. Unix checks that the staged binary runs before renaming it into place. PowerShell verifies the staged bytes and keeps a recovery backup while replacing an existing executable; if Windows cannot complete replacement or recovery, the error identifies any retained backup instead of discarding it.
+
 For a required, pinned release check:
 
 ```bash

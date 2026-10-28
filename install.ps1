@@ -193,6 +193,99 @@ function Assert-Sha256Checksum {
   Write-Ok "Checksum verified"
 }
 
+function Restore-ArtifactBackup {
+  param([string]$BackupPath, [string]$DestPath)
+  # ReplaceFileW can move the old executable to the backup before reporting failure.
+  # Restore with a no-overwrite move: another installer may have filled the destination.
+  try {
+    if (-not (Test-Path -LiteralPath $BackupPath -ErrorAction Stop)) { return '' }
+    if (Test-Path -LiteralPath $DestPath -ErrorAction Stop) {
+      return "Previous executable retained at $BackupPath; the current destination was left unchanged."
+    }
+    [System.IO.File]::Move($BackupPath, $DestPath)
+    return 'Previous executable restored.'
+  } catch {
+    return "Recovery backup retained at $BackupPath; automatic restore failed: $($_.Exception.Message)"
+  }
+}
+
+function Publish-Artifact {
+  param([string]$FilePath, [string]$DestPath)
+
+  $FilePath = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($FilePath)
+  $DestPath = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($DestPath)
+  if ([System.IO.Directory]::Exists($DestPath)) { throw "Installation destination is a directory: $DestPath" }
+  $transaction = '.s2p-install-' + [Guid]::NewGuid().ToString('N')
+  $parent = [System.IO.Path]::GetDirectoryName($DestPath)
+  $stagePath = Join-Path $parent ($transaction + '.stage')
+  $backupPath = Join-Path $parent ($transaction + '.backup')
+  $sourceStream = $null
+  $stageStream = $null
+  $sha = $null
+  $stageOwned = $false
+  $published = $false
+  $replaceAttempted = $false
+  try {
+    try {
+      $sourceStream = [System.IO.File]::Open($FilePath, [System.IO.FileMode]::Open, [System.IO.FileAccess]::Read, [System.IO.FileShare]::Read)
+      $length = $sourceStream.Length
+      if ($length -eq 0) { throw 'Refusing to install an empty artifact' }
+      # Never open the working executable for writing. Stage on its filesystem, with
+      # an exclusive new file, so disk-full/interrupted copies cannot truncate it.
+      $stageStream = [System.IO.File]::Open($stagePath, [System.IO.FileMode]::CreateNew, [System.IO.FileAccess]::ReadWrite, [System.IO.FileShare]::None)
+      $stageOwned = $true
+      $sourceStream.CopyTo($stageStream)
+      $stageStream.Flush($true)
+      if ($stageStream.Length -ne $length) { throw 'Staged artifact has an incomplete length' }
+      $sourceStream.Position = 0
+      $stageStream.Position = 0
+      $sha = [System.Security.Cryptography.SHA256]::Create()
+      $expected = [Convert]::ToBase64String($sha.ComputeHash($sourceStream))
+      $actual = [Convert]::ToBase64String($sha.ComputeHash($stageStream))
+      if ($actual -cne $expected) { throw 'Staged artifact does not match the prepared artifact' }
+      $stageStream.Dispose()
+      $stageStream = $null
+      $sourceStream.Dispose()
+      $sourceStream = $null
+    } catch {
+      throw "Could not stage installation for ${DestPath}: $($_.Exception.Message)"
+    }
+
+    try {
+      if ([System.IO.File]::Exists($DestPath)) {
+        # A backup is necessary even for atomic replacement: Windows documents a
+        # failure mode that loses the old name when ReplaceFileW has no backup path.
+        if (Test-Path -LiteralPath $backupPath) { throw "Backup path already exists: $backupPath" }
+        $replaceAttempted = $true
+        [System.IO.File]::Replace($stagePath, $DestPath, $backupPath)
+      } else {
+        # The two-argument overload never overwrites a destination created meanwhile.
+        [System.IO.File]::Move($stagePath, $DestPath)
+      }
+      $published = $true
+    } catch {
+      $publishError = $_.Exception.Message
+      $recovery = ''
+      if ($replaceAttempted) { $recovery = Restore-ArtifactBackup -BackupPath $backupPath -DestPath $DestPath }
+      throw "Could not publish installation to ${DestPath}: $publishError $recovery"
+    }
+  } finally {
+    if ($null -ne $stageStream) { try { $stageStream.Dispose() } catch {} }
+    if ($null -ne $sourceStream) { try { $sourceStream.Dispose() } catch {} }
+    if ($null -ne $sha) { $sha.Dispose() }
+    if ($stageOwned) {
+      try { [System.IO.File]::Delete($stagePath) }
+      catch { Write-Warn "Temporary installation file retained at ${stagePath}: $($_.Exception.Message)" }
+    }
+    # Never remove a recovery backup after failed publication. A cleanup error after
+    # successful publication does not undo the installed binary or report a false failure.
+    if ($published -and $replaceAttempted) {
+      try { [System.IO.File]::Delete($backupPath) }
+      catch { Write-Warn "Previous executable retained at ${backupPath}: $($_.Exception.Message)" }
+    }
+  }
+}
+
 function Build-From-Source {
   param([string]$OwnerParam, [string]$RepoParam, [string]$VersionParam, [string]$OutFile)
 
@@ -235,7 +328,7 @@ function Build-From-Source {
 
     $built = Join-Path -Path $srcDir -ChildPath 'dist\s2p-windows-x64.exe'
     if (-not (Test-Path -Path $built -PathType Leaf)) { throw "Build failed; expected output not found: $built" }
-    [System.IO.File]::Copy($built, $OutFile, $true)
+    Publish-Artifact -FilePath $built -DestPath $OutFile
   } finally {
     Remove-Item -Recurse -Force -ErrorAction SilentlyContinue $tmpRoot
   }
@@ -269,10 +362,7 @@ function Install-Artifact {
       Maybe-VerifySha256 -FilePath $tmpFile -ShaUrl $ShaUrl -Require:$Require
     }
 
-    if ((Get-Item -LiteralPath $tmpFile).Length -eq 0) { throw "Refusing to install an empty artifact" }
-    # File.Copy treats a directory at the destination as an error. Copy-Item would copy
-    # inside it and could report success despite leaving the requested executable absent.
-    [System.IO.File]::Copy($tmpFile, $DestPath, $true)
+    Publish-Artifact -FilePath $tmpFile -DestPath $DestPath
     try { Unblock-File -LiteralPath $DestPath -ErrorAction SilentlyContinue } catch {}
     if ($sourceBuilt) {
       Write-Ok "Installed $DestPath (built from release $VersionParam source)"

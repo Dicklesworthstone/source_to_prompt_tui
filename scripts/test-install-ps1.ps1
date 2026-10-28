@@ -73,6 +73,10 @@ $asset = 's2p-windows-x64.exe'
 [System.IO.File]::WriteAllBytes((Join-Path $testRoot 'empty-payload'), [byte[]]@())
 $emptyDigest = (Get-FileHash -LiteralPath (Join-Path $testRoot 'empty-payload') -Algorithm SHA256).Hash.ToLowerInvariant()
 [System.IO.File]::WriteAllText((Join-Path $testRoot 'empty-payload.sha256'), "$emptyDigest  $asset`n", [Text.Encoding]::ASCII)
+$upgradePayload = Join-Path $testRoot 'upgrade-payload'
+[System.IO.File]::WriteAllText($upgradePayload, "release fixture, version two with different bytes`n", [Text.Encoding]::ASCII)
+$upgradeDigest = (Get-FileHash -LiteralPath $upgradePayload -Algorithm SHA256).Hash.ToLowerInvariant()
+[System.IO.File]::WriteAllText((Join-Path $testRoot 'upgrade.sha256'), "$upgradeDigest  $asset`n", [Text.Encoding]::ASCII)
 
 # A socket server deliberately closes one response before its advertised content length.
 # This exercises the real Invoke-WebRequest failure, including any partially written file.
@@ -222,14 +226,104 @@ try {
   } '.+'
   Assert-Equal 'failed write does not install inside a directory' ([string](@(Get-ChildItem -LiteralPath $blocked).Count)) '0'
 
+  $upgradeDest = Join-Path $testRoot 'upgrade.exe'
+  [IO.File]::Copy($payload, $upgradeDest)
+  Install-Artifact -BaseUrl "$base/upgrade-payload" -ShaUrl "$base/upgrade.sha256" -DestPath $upgradeDest -OwnerParam fixture -RepoParam fixture -VersionParam v2 -Require
+  Assert-Equal 'successful upgrade publishes the complete new artifact' ((Get-FileHash -LiteralPath $upgradeDest -Algorithm SHA256).Hash.ToLowerInvariant()) $upgradeDigest
+  Assert-Equal 'successful publication removes private stage and backup' ([string](@(Get-ChildItem -LiteralPath $testRoot -Filter '.s2p-install-*' -Force).Count)) '0'
+
+  # Use actual filesystem states documented for ReplaceFileW failures. This exercises
+  # recovery without claiming to reproduce Windows error 1177 on a non-Windows host.
+  $recoveryBackup = Join-Path $testRoot 'recovery-backup.exe'
+  $recoveryDest = Join-Path $testRoot 'recovery-destination.exe'
+  [IO.File]::Copy($payload, $recoveryBackup)
+  $recoveryMessage = Restore-ArtifactBackup -BackupPath $recoveryBackup -DestPath $recoveryDest
+  Assert-Equal 'replacement failure recovery restores an absent destination' ((Get-FileHash -LiteralPath $recoveryDest -Algorithm SHA256).Hash.ToLowerInvariant()) $digest
+  Assert-Equal 'restored backup is moved, not left as a second recovery copy' ([string]([IO.File]::Exists($recoveryBackup))) 'False'
+  [IO.File]::Copy($upgradePayload, $recoveryBackup)
+  $recoveryMessage = Restore-ArtifactBackup -BackupPath $recoveryBackup -DestPath $recoveryDest
+  Assert-Equal 'recovery never overwrites a destination that appeared concurrently' ((Get-FileHash -LiteralPath $recoveryDest -Algorithm SHA256).Hash.ToLowerInvariant()) $digest
+  Assert-Equal 'recovery preserves backup when the destination is occupied' ((Get-FileHash -LiteralPath $recoveryBackup -Algorithm SHA256).Hash.ToLowerInvariant()) $upgradeDigest
+  Assert-Equal 'recovery reports the retained backup path' ([string]($recoveryMessage.Contains($recoveryBackup))) 'True'
+  $unrestorable = Join-Path (Join-Path $testRoot 'missing-recovery-directory') 's2p.exe'
+  $recoveryMessage = Restore-ArtifactBackup -BackupPath $recoveryBackup -DestPath $unrestorable
+  Assert-Equal 'failed restore retains complete backup bytes' ((Get-FileHash -LiteralPath $recoveryBackup -Algorithm SHA256).Hash.ToLowerInvariant()) $upgradeDigest
+  Assert-Equal 'failed restore identifies the retained backup' ([string]($recoveryMessage.Contains($recoveryBackup) -and $recoveryMessage -match 'restore failed')) 'True'
+  $recoveryMessage = Restore-ArtifactBackup -BackupPath $recoveryBackup -DestPath $blocked
+  Assert-Equal 'recovery treats a directory collision as an occupied destination' ([string](@(Get-ChildItem -LiteralPath $blocked).Count)) '0'
+  Assert-Equal 'directory collision preserves recovery backup' ((Get-FileHash -LiteralPath $recoveryBackup -Algorithm SHA256).Hash.ToLowerInvariant()) $upgradeDigest
+
+  # Linux provides a real per-process file-size limit. Apply it after CoreCLR starts
+  # (applying it before startup prevents its memory mappings), then restore it in finally.
+  # The installer still uses native file I/O; neither copy nor hash results are mocked.
+  if ($env:OS -ne 'Windows_NT' -and (Get-Command uname -ErrorAction SilentlyContinue) -and ((& uname -s) -eq 'Linux')) {
+    Add-Type -TypeDefinition @'
+using System;
+using System.Runtime.InteropServices;
+namespace S2PInstallerTests {
+  public sealed class FileSizeLimit : IDisposable {
+    [StructLayout(LayoutKind.Sequential)]
+    struct Limit { public UIntPtr Current; public UIntPtr Maximum; }
+    [DllImport("libc", SetLastError = true)] static extern int getrlimit(int resource, out Limit limit);
+    [DllImport("libc", SetLastError = true)] static extern int setrlimit(int resource, ref Limit limit);
+    [DllImport("libc", SetLastError = true)] static extern IntPtr signal(int signum, IntPtr handler);
+    Limit previous;
+    IntPtr previousSignal;
+    bool applied;
+    public FileSizeLimit(UIntPtr bytes) {
+      if (getrlimit(1, out previous) != 0) throw new Exception("getrlimit failed");
+      previousSignal = signal(25, new IntPtr(1)); // SIGXFSZ, SIG_IGN: report EFBIG instead of killing this shell.
+      if (previousSignal == new IntPtr(-1)) throw new Exception("signal failed");
+      Limit limited = previous;
+      limited.Current = bytes;
+      if (setrlimit(1, ref limited) != 0) {
+        signal(25, previousSignal);
+        throw new Exception("setrlimit failed");
+      }
+      applied = true;
+    }
+    public void Dispose() {
+      if (!applied) return;
+      int result = setrlimit(1, ref previous);
+      signal(25, previousSignal);
+      applied = false;
+      if (result != 0) throw new Exception("Could not restore file-size limit");
+    }
+  }
+}
+'@
+    $limitedDest = Join-Path $testRoot 'limited-upgrade.exe'
+    $limitedSource = Join-Path $testRoot 'limited-replacement.exe'
+    $truePath = @(Get-Command true -CommandType Application)[0].Source
+    $falsePath = @(Get-Command false -CommandType Application)[0].Source
+    [IO.File]::Copy($truePath, $limitedDest)
+    [IO.File]::Copy($falsePath, $limitedSource)
+    if ((Get-Item -LiteralPath $limitedSource).Length -le 8192) { throw 'Native replacement fixture does not exceed the file-size limit' }
+    $beforeLimitedHash = (Get-FileHash -LiteralPath $limitedDest -Algorithm SHA256).Hash
+    & $limitedDest
+    Assert-Equal 'existing executable runs before limited upgrade' ([string]$LASTEXITCODE) '0'
+    $limit = [S2PInstallerTests.FileSizeLimit]::new([UIntPtr]8192)
+    try {
+      Assert-Throws 'native staging write failure stops publication' {
+        Publish-Artifact -FilePath $limitedSource -DestPath $limitedDest
+      } 'Could not stage installation'
+    } finally { $limit.Dispose() }
+    Assert-Equal 'native failed upgrade preserves every old executable byte' ((Get-FileHash -LiteralPath $limitedDest -Algorithm SHA256).Hash) $beforeLimitedHash
+    & $limitedDest
+    Assert-Equal 'old executable still runs after failed staging write' ([string]$LASTEXITCODE) '0'
+    Assert-Equal 'failed staging write cleans its private partial file' ([string](@(Get-ChildItem -LiteralPath $testRoot -Filter '.s2p-install-*' -Force).Count)) '0'
+  } else { Write-Host 'SKIP Linux native file-size-limit publication failure (non-Linux host)' }
+
   # Hold a real, non-shared destination handle on Windows to reject replacement.
   if ($env:OS -eq 'Windows_NT') {
     $held = [IO.File]::Open($installed, [IO.FileMode]::Open, [IO.FileAccess]::ReadWrite, [IO.FileShare]::None)
     try {
       Assert-Throws 'locked destination write fails' {
-        Install-Artifact -BaseUrl "$base/payload" -ShaUrl "$base/octet.sha256" -DestPath $installed -OwnerParam fixture -RepoParam fixture -VersionParam v1 -Require
-      } '.+'
+        Install-Artifact -BaseUrl "$base/upgrade-payload" -ShaUrl "$base/upgrade.sha256" -DestPath $installed -OwnerParam fixture -RepoParam fixture -VersionParam v2 -Require
+      } 'Could not publish installation'
     } finally { $held.Dispose() }
+    Assert-Equal 'failed locked publication preserves the old executable' ((Get-FileHash -LiteralPath $installed -Algorithm SHA256).Hash.ToLowerInvariant()) $digest
+    Assert-Equal 'failed locked publication cleans its private stage' ([string](@(Get-ChildItem -LiteralPath $testRoot -Filter '.s2p-install-*.stage' -Force).Count)) '0'
   } else { Write-Host 'SKIP Windows file-sharing write failure (non-Windows host)' }
 
   if ((Get-Command git -ErrorAction SilentlyContinue) -and (Get-Command bun -ErrorAction SilentlyContinue)) {
