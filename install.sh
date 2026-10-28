@@ -15,6 +15,7 @@ LOCK_FILE="/tmp/s2p-install.lock"
 VERIFY=0
 CHECKSUM_URL="${CHECKSUM_URL:-}"
 INSTALL_NAME=""
+STAGING_DIR=""
 
 log() { [ "$QUIET" -eq 1 ] && return 0; echo -e "$@"; }
 info() { log "\033[0;34m→\033[0m $*"; }
@@ -180,6 +181,9 @@ detect_target() {
 
 compute_install_name() {
   INSTALL_NAME="$BINARY"
+  case "$INSTALL_NAME" in
+    .|..|*/*|*\\*) die "Binary name must be a single filename: $INSTALL_NAME" ;;
+  esac
   if [ "${OS:-}" = "windows" ]; then
     case "$INSTALL_NAME" in
       *.exe) ;;
@@ -213,6 +217,9 @@ lock() {
 }
 
 cleanup() {
+  if [ -n "${STAGING_DIR:-}" ]; then
+    rm -rf "$STAGING_DIR" || warn "Could not remove private staging directory: $STAGING_DIR"
+  fi
   if [ -n "${TMP:-}" ]; then rm -rf "$TMP"; fi
   if [ "${LOCKED:-0}" -eq 1 ]; then rm -rf "$LOCK_DIR"; fi
 }
@@ -269,15 +276,25 @@ verify_checksum() {
 }
 
 install_artifact() {
-  local artifact="$1"
+  local artifact="$1" destination_dir
   [ -s "$artifact" ] || die "Artifact is empty or missing: $artifact"
-  chmod 0755 "$artifact" || die "Could not make the artifact executable"
-  # Never replace a working install with a binary that cannot run here.
-  if [ "${OS:-}" != "windows" ] && ! "$artifact" --version >/dev/null 2>&1; then
+  destination_dir=$(cd -- "$DEST" && pwd -P) || die "Could not access install directory: $DEST"
+  [ ! -d "$destination_dir/$INSTALL_NAME" ] || die "Install destination is a directory: $DEST/$INSTALL_NAME"
+
+  # Keep the previous executable intact until all bytes and executable metadata
+  # are ready. Staging beside the destination makes the final rename atomic.
+  STAGING_DIR=$(mktemp -d "$destination_dir/.s2p-install.XXXXXXXX") ||
+    die "Could not create private staging directory in $DEST; existing installation left unchanged"
+  install -m 0755 "$artifact" "$STAGING_DIR/$INSTALL_NAME" ||
+    die "Could not install $INSTALL_NAME to $DEST: staging failed; existing installation left unchanged"
+  if [ "${OS:-}" != "windows" ] && ! "$STAGING_DIR/$INSTALL_NAME" --version >/dev/null 2>&1; then
     die "Artifact does not run on this machine; ${DEST}/${INSTALL_NAME} left unchanged"
   fi
-  [ ! -d "$DEST/$INSTALL_NAME" ] || die "Install destination is a directory: $DEST/$INSTALL_NAME"
-  install -m 0755 "$artifact" "$DEST/$INSTALL_NAME" || die "Could not install $INSTALL_NAME to $DEST"
+  [ ! -d "$destination_dir/$INSTALL_NAME" ] || die "Install destination is a directory: $DEST/$INSTALL_NAME"
+  # Pass the parent directory, not dest/name: mv must never interpret an existing
+  # dest/name directory as a container and install into dest/name/name.
+  mv -f "$STAGING_DIR/$INSTALL_NAME" "$destination_dir/" ||
+    die "Could not publish $INSTALL_NAME to $DEST; installation did not complete"
 }
 
 download_binary() {

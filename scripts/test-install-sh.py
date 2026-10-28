@@ -14,6 +14,7 @@ import http.server
 import json
 import os
 from pathlib import Path
+import resource
 import shutil
 import socket
 import ssl
@@ -31,6 +32,7 @@ PAYLOAD = b'''#!/bin/sh
 if [ -n "${S2P_TEST_EXEC_LOG:-}" ]; then printf 'executed\n' >> "$S2P_TEST_EXEC_LOG"; fi
 printf 's2p v0.3.4\n'
 '''
+PREVIOUS_PAYLOAD = b"#!/bin/sh\nprintf 'previous installation\\n'\n"
 
 
 class ReleaseServer(http.server.BaseHTTPRequestHandler):
@@ -47,8 +49,16 @@ class ReleaseServer(http.server.BaseHTTPRequestHandler):
         elif self.path.endswith(".sha256") or self.path == "/custom-checksum":
             status = scenario.get("checksum_status", 200)
             asset = self.path.rsplit("/", 1)[-1].removesuffix(".sha256")
-            body = scenario.get("checksum", (hashlib.sha256(PAYLOAD).hexdigest() + "  " + asset + "\n").encode())
+            payload = scenario.get("payload", PAYLOAD)
+            body = scenario.get("checksum", (hashlib.sha256(payload).hexdigest() + "  " + asset + "\n").encode())
             interrupted = scenario.get("interrupt_checksum", False)
+            if "copy_file_limit" in scenario:
+                # The download already completed. Limit the installer parent so
+                # the next native install, not curl, encounters SIGXFSZ mid-copy.
+                if not self.server.installer_started.wait(5):
+                    raise RuntimeError("Installer PID was not available")
+                limit = scenario["copy_file_limit"]
+                resource.prlimit(self.server.installer_pid, resource.RLIMIT_FSIZE, (limit, limit))
         else:
             status = scenario.get("binary_status", 200)
             body = scenario.get("payload", PAYLOAD)
@@ -141,7 +151,8 @@ class InstallerTests(unittest.TestCase):
         self.runs = 0
 
     def run_installer(self, *, flags=(), version=VERSION, scenario=None, env_extra=None,
-                      no_hash=False, directory_target=False):
+                      no_hash=False, directory_target=False, symlink_target=False,
+                      restrict_privileges=False):
         self.runs += 1
         run_dir = self.case / str(self.runs)
         run_dir.mkdir()
@@ -150,10 +161,18 @@ class InstallerTests(unittest.TestCase):
         dest.mkdir()
         dest.chmod(0o755)
         installed = dest / "s2p"
+        external = None
         if directory_target:
             installed.mkdir()
+        elif symlink_target:
+            external = run_dir / "external-s2p"
+            external.write_bytes(PREVIOUS_PAYLOAD)
+            external.chmod(0o755)
+            installed.symlink_to(external)
         else:
-            installed.write_bytes(b"previous installation\n")
+            installed.write_bytes(PREVIOUS_PAYLOAD)
+            installed.chmod(0o755)
+        previous_inode = installed.stat().st_ino
         tmp_dir = run_dir / "tmp"
         tmp_dir.mkdir()
         tmp_dir.chmod(0o777)
@@ -174,11 +193,12 @@ class InstallerTests(unittest.TestCase):
                     "GIT_CONFIG_GLOBAL": str(git_config), "GIT_CONFIG_SYSTEM": os.devnull,
                     "GIT_TERMINAL_PROMPT": "0", "BUN_INSTALL_CACHE_DIR": str(tmp_dir / "bun-cache"),
                     "S2P_TEST_EXEC_LOG": str(tmp_dir / "execution.log"),
+                    "S2P_TEST_DEST": str(dest),
                     "PATH": str(dest) + os.pathsep + str(self.native_tools) + os.pathsep + env["PATH"]})
         if no_hash:
             isolated = run_dir / "no-hash-bin"
             isolated.mkdir()
-            for command in ("curl", "uname", "tr", "grep", "head", "sed", "mkdir", "cat", "mktemp", "rm", "chmod", "install"):
+            for command in ("curl", "uname", "tr", "grep", "head", "sed", "mkdir", "cat", "mktemp", "rm", "chmod", "install", "mv"):
                 executable = shutil.which(command)
                 if executable:
                     (isolated / command).symlink_to(executable)
@@ -187,15 +207,29 @@ class InstallerTests(unittest.TestCase):
             env.update(env_extra)
         self.server.scenario = scenario or {}
         self.server.requests = []
+        self.server.installer_started = threading.Event()
         command = [self.bash, str(INSTALLER), "--dest", str(dest)]
         if version is not None:
             command += ["--version", version]
         command += list(flags)
-        result = subprocess.run(command, env=env, cwd=run_dir, stdout=subprocess.PIPE,
-                                stderr=subprocess.STDOUT, text=True, timeout=45)
+        if restrict_privileges and os.geteuid() == 0:
+            command = [shutil.which("setpriv"), "--bounding-set=-dac_override,-dac_read_search", "--", *command]
+        process = subprocess.Popen(command, env=env, cwd=run_dir, stdout=subprocess.PIPE,
+                                   stderr=subprocess.STDOUT, text=True)
+        self.server.installer_pid = process.pid
+        self.server.installer_started.set()
+        try:
+            output, _ = process.communicate(timeout=45)
+        except subprocess.TimeoutExpired:
+            process.kill()
+            process.communicate()
+            raise
+        result = subprocess.CompletedProcess(command, process.returncode, output)
         (run_dir / "installer.log").write_text(result.stdout)
         (run_dir / "requests.json").write_text(json.dumps(self.server.requests, indent=2))
         result.installed = installed
+        result.previous_inode = previous_inode
+        result.external = external
         result.execution_log = tmp_dir / "execution.log"
         return result
 
@@ -205,7 +239,7 @@ class InstallerTests(unittest.TestCase):
         self.assertNotIn("Installed s2p", result.stdout)
         self.assertNotIn("Done. Run:", result.stdout)
         if unchanged:
-            self.assertEqual(result.installed.read_bytes(), b"previous installation\n")
+            self.assertEqual(result.installed.read_bytes(), PREVIOUS_PAYLOAD)
 
     def require_bun(self):
         if not self.bun:
@@ -261,6 +295,10 @@ class InstallerTests(unittest.TestCase):
                 result = self.run_installer(flags=flags, no_hash=True)
                 self.assert_failure(result, "No SHA256 utility")
                 self.assertFalse(result.execution_log.exists())
+        optional = self.run_installer(no_hash=True, scenario={"checksum_status": 404})
+        self.assertEqual(optional.returncode, 0, optional.stdout)
+        self.assertNotIn("Checksum verified", optional.stdout)
+        self.assertEqual(optional.installed.read_bytes(), PAYLOAD)
 
     def test_interrupted_binary_and_checksum_abort(self):
         for interrupted in ("interrupt_binary", "interrupt_checksum"):
@@ -288,6 +326,76 @@ class InstallerTests(unittest.TestCase):
         result = self.run_installer(directory_target=True)
         self.assert_failure(result, "Install destination is a directory", unchanged=False)
         self.assertEqual(list(result.installed.iterdir()), [])
+
+    @unittest.skipUnless(hasattr(resource, "prlimit"), "Linux prlimit is needed for a real mid-copy failure")
+    def test_interrupted_upgrade_copy_preserves_existing_executable(self):
+        payload = PAYLOAD + b"#" + b"x" * 16384 + b"\n"
+        result = self.run_installer(flags=("--verify",),
+                                    scenario={"payload": payload, "copy_file_limit": 4096})
+        self.assertIn("Checksum verified", result.stdout)
+        self.assert_failure(result, "Could not install")
+        self.assertEqual(result.installed.stat().st_ino, result.previous_inode)
+        self.assertEqual(subprocess.check_output([str(result.installed)], text=True).strip(), "previous installation")
+        self.assertEqual(list(result.installed.parent.glob(".s2p-install.*")), [])
+
+    def test_successful_upgrade_publishes_complete_executable(self):
+        payload = PAYLOAD + b"#" + b"x" * 16384 + b"\n"
+        result = self.run_installer(flags=("--verify",), scenario={"payload": payload})
+        self.assertEqual(result.returncode, 0, result.stdout)
+        self.assertEqual(result.installed.read_bytes(), payload)
+        self.assertNotEqual(result.installed.stat().st_ino, result.previous_inode)
+        self.assertEqual(subprocess.check_output([str(result.installed), "--version"], text=True).strip(), "s2p v0.3.4")
+        self.assertEqual(list(result.installed.parent.glob(".s2p-install.*")), [])
+
+    def test_failed_staged_readiness_preserves_existing_executable(self):
+        payload = b"#!/bin/sh\nexec /nonexistent/s2p-regression-program\n"
+        result = self.run_installer(flags=("--verify",), scenario={"payload": payload})
+        self.assertIn("Checksum verified", result.stdout)
+        self.assert_failure(result, "Artifact does not run")
+        self.assertEqual(result.installed.stat().st_ino, result.previous_inode)
+        self.assertEqual(list(result.installed.parent.glob(".s2p-install.*")), [])
+
+    def test_failed_publish_preserves_existing_executable(self):
+        if os.geteuid() == 0 and not shutil.which("setpriv"):
+            self.skipTest("Root needs setpriv to exercise native directory permissions")
+        payload = b"#!/bin/sh\nchmod 0555 \"$S2P_TEST_DEST\"\nprintf 's2p v0.3.4\\n'\n"
+        result = self.run_installer(flags=("--verify",), scenario={"payload": payload},
+                                    restrict_privileges=True)
+        try:
+            self.assert_failure(result, "Could not publish")
+            self.assertEqual(result.installed.stat().st_ino, result.previous_inode)
+            self.assertEqual(subprocess.check_output([str(result.installed)], text=True).strip(), "previous installation")
+            # A directory made unwritable after staging also prevents removal of
+            # that private directory; this is reported, never treated as success.
+            self.assertIn("Could not remove private staging directory", result.stdout)
+        finally:
+            result.installed.parent.chmod(0o755)
+
+    def test_symlink_upgrade_does_not_overwrite_external_target(self):
+        result = self.run_installer(flags=("--verify",), symlink_target=True)
+        self.assertEqual(result.returncode, 0, result.stdout)
+        self.assertFalse(result.installed.is_symlink())
+        self.assertEqual(result.installed.read_bytes(), PAYLOAD)
+        self.assertEqual(result.external.read_bytes(), PREVIOUS_PAYLOAD)
+        self.assertEqual(list(result.installed.parent.glob(".s2p-install.*")), [])
+
+    def test_directory_appearing_during_readiness_is_not_a_container(self):
+        payload = (b"#!/bin/sh\n"
+                   b"mv \"$S2P_TEST_DEST/s2p\" \"$S2P_TEST_DEST/previous-s2p\" && "
+                   b"mkdir \"$S2P_TEST_DEST/s2p\"\n")
+        result = self.run_installer(flags=("--verify",), scenario={"payload": payload})
+        self.assert_failure(result, "Install destination is a directory", unchanged=False)
+        self.assertTrue(result.installed.is_dir())
+        self.assertEqual(list(result.installed.iterdir()), [])
+        self.assertEqual((result.installed.parent / "previous-s2p").read_bytes(), PREVIOUS_PAYLOAD)
+        self.assertEqual(list(result.installed.parent.glob(".s2p-install.*")), [])
+
+    def test_binary_name_cannot_escape_private_staging(self):
+        for name in ("../s2p", "subdir/s2p", "subdir\\s2p", ".", ".."):
+            with self.subTest(name=name):
+                result = self.run_installer(env_extra={"BINARY": name})
+                self.assert_failure(result, "Binary name must be a single filename")
+                self.assertEqual(self.server.requests, [])
 
     def test_latest_is_resolved_once_to_pinned_download_urls(self):
         result = self.run_installer(version=None, flags=("--verify",))
