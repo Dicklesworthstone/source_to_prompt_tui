@@ -9,6 +9,37 @@ Repository: <https://github.com/Dicklesworthstone/source_to_prompt_tui>
 
 ---
 
+## [0.3.5] - 2026-11-21
+
+Hardens both Unix and Windows installers for strict integrity, atomic upgrade safety, non-AVX2 Linux compatibility, and Windows PowerShell 5.1 correctness, alongside dependency and security maintenance updates.
+
+### Installer Integrity & Atomic Upgrades
+
+- **Fail-closed checksum verification and pinned source builds** ([`16c4585`](https://github.com/Dicklesworthstone/source_to_prompt_tui/commit/16c4585b9a16a18839d22eb03015d88cc2b1c90b), [`e6695d3`](https://github.com/Dicklesworthstone/source_to_prompt_tui/commit/e6695d39315dc5142dfd78d83806363f1e9a122d), [`8bd2023`](https://github.com/Dicklesworthstone/source_to_prompt_tui/commit/8bd2023924f1905c09dd89421490ab4a22225c76)) -- Both `install.sh` and `install.ps1` now reject malformed, mismatched, multi-record, or wrong-filename `.sha256` sidecars regardless of `--verify` / `-Verify`, require a working SHA256 utility, decode octet-stream sidecars reliably on both Windows PowerShell 5.1 and PowerShell 7, and pin `--from-source` / `-FromSource` builds to the exact resolved release tag or commit SHA rather than cloning the default branch. Closes [#7](https://github.com/Dicklesworthstone/source_to_prompt_tui/issues/7).
+- **Atomic staged upgrades with rollback safety** ([`7a100a4`](https://github.com/Dicklesworthstone/source_to_prompt_tui/commit/7a100a4a9a7f9425274c7d0f7dcbf72359d6e68f), [`5f339db`](https://github.com/Dicklesworthstone/source_to_prompt_tui/commit/5f339db4a7b74e344f230e4cc5a96f15e16adb81)) -- `install.sh` stages replacements in a private directory on the destination filesystem and verifies `--version` before atomically renaming into place; `install.ps1` flushes and hashes an adjacent staging file and uses backup-aware `File.Replace` so interrupted writes never truncate an existing working binary.
+- **Non-AVX2 Linux x86_64 baseline binary support** ([`23f03e1`](https://github.com/Dicklesworthstone/source_to_prompt_tui/commit/23f03e1d285f98effeb8cc32c651acd763d0c72c)) -- Added `build:linux-x64-baseline` (`--target=bun-linux-x64-baseline`) and automatic `/proc/cpuinfo` AVX2 detection in `install.sh` to select `s2p-linux-x64-baseline` on x86_64 CPUs lacking AVX2.
+- **Minified GitHub API JSON tag parsing** ([`bb76ea5`](https://github.com/Dicklesworthstone/source_to_prompt_tui/commit/bb76ea5969750615109d5d05b7fffb0b8bbc10c2)) -- `install.sh` resolves `tag_name` cleanly from minified as well as formatted GitHub Releases API JSON.
+
+### Windows Installer Fixes
+
+- **Move `param(...)` block before executable statements & use ASCII log prefixes** ([`1d70063`](https://github.com/Dicklesworthstone/source_to_prompt_tui/commit/1d70063c72981f37e32c93108122a1e7427b171b), [`097703d`](https://github.com/Dicklesworthstone/source_to_prompt_tui/commit/097703d666b8ea3869a8d38f711f0adb21e14dfb)) -- Fixes PowerShell syntax parsing errors in `install.ps1` and ensures BOM-less Windows-1252 decoding on Windows PowerShell 5.1 parses with zero errors. Closes [#6](https://github.com/Dicklesworthstone/source_to_prompt_tui/issues/6).
+- **Eliminate multi-minute Windows PowerShell 5.1 download stalls** ([`fad5fdf`](https://github.com/Dicklesworthstone/source_to_prompt_tui/commit/fad5fdf32edeb13a6ca7bc430073c639bfde78af)) -- Scopes `$ProgressPreference = 'SilentlyContinue'` inside `Download-File` on PowerShell < 6 or `-Quiet`. Closes [#8](https://github.com/Dicklesworthstone/source_to_prompt_tui/issues/8).
+- **Preserve expandable User PATH entries and registry value kind** ([`a78cb9f`](https://github.com/Dicklesworthstone/source_to_prompt_tui/commit/a78cb9f5a21f454647955adb9b15c511116e3e19)) -- `Ensure-DestOnPath` reads the raw registry value with `DoNotExpandEnvironmentNames`, preserves `REG_EXPAND_SZ` / `REG_SZ`, broadcasts `WM_SETTINGCHANGE`, and supports `-NoPathUpdate`. Closes [#9](https://github.com/Dicklesworthstone/source_to_prompt_tui/issues/9).
+- **Executable installer regression test suites** -- Added `scripts/test-install-sh.py` (25 end-to-end Unix installer test cases) and `scripts/test-install-ps1.ps1` (99+ PowerShell integrity & PATH checks).
+
+### Dependencies & Security
+
+- **Updated direct dependencies**: `terser` `5.46.0` → `5.51.4`, `ignore` `5.3.2` → `7.0.16` (git-aligned backslash/whitespace handling and `...` filename support), `@types/react` `18.3.27` → `18.3.31`, `@types/node` `22.19.7` → `26.6.6`, `typescript` `5.9.3` → `7.0.2`, `react-devtools-core` `7.0.1` → `8.0.0`.
+- **Resolved all 6 `bun audit` advisories (1 critical, 4 high, 1 moderate → 0 vulnerabilities)**: refreshed transitive `shell-quote` (`1.8.3` → `1.12.0`), `source-map-js` (`1.2.1` → `1.2.4`), and `ws` (`7.5.10` → `7.5.14`, `8.18.3` → `8.23.0`) while preserving `csso@5.0.5`, `css-tree@2.2.1`, `mdn-data@2.0.28`, and `tiktoken@1.0.22` compatibility with `scripts/patch-modules.js`.
+- **Deferred**: `ink` 8 / `react` 19 migration remains tracked in [#10](https://github.com/Dicklesworthstone/source_to_prompt_tui/issues/10) pending `ink-syntax-highlight` peer-dependency compatibility.
+
+### Formatting & Housekeeping
+
+- Formatted Ink TUI source, patch script, and HTML reference shell ([`057a95a`](https://github.com/Dicklesworthstone/source_to_prompt_tui/commit/057a95a8686a64bb7043cfcd6fedc737b9339d2c)).
+- Updated documentation and agent guidelines ([`5279bd3`](https://github.com/Dicklesworthstone/source_to_prompt_tui/commit/5279bd3b0d7de2246b3ecac23ed727ca22debdd7), [`6974a4b`](https://github.com/Dicklesworthstone/source_to_prompt_tui/commit/6974a4b9440be1f1112fe9765564310b526cf58a)).
+
+---
+
 ## [0.3.4] - 2026-07-03
 
 Completes the "make the published binary actually start" work from 0.3.3. The 0.3.3 binary still crashed on launch for real end users with `error: Missing tiktoken_bg.wasm` — the same class of bug as the mdn-data crash, just a second un-embedded asset.
@@ -218,7 +249,10 @@ Binaries: `s2p-macos-arm64`, `s2p-macos-x64`, `s2p-linux-x64`, `s2p-linux-arm64`
 
 - **Add initial project structure** ([`710943d`](https://github.com/Dicklesworthstone/source_to_prompt_tui/commit/710943d8e3663c490a718c95af98fed9d116a0cd), 2025-12-06) -- Established the Bun + TypeScript + React + Ink stack. Single-file architecture in `src/index.tsx` (~2,250 lines). Included `.gitignore`, `package.json`, `tsconfig.json`, `bun.lock`, and type declarations.
 
-[Unreleased]: https://github.com/Dicklesworthstone/source_to_prompt_tui/compare/v0.3.2...HEAD
+[Unreleased]: https://github.com/Dicklesworthstone/source_to_prompt_tui/compare/v0.3.5...HEAD
+[0.3.5]: https://github.com/Dicklesworthstone/source_to_prompt_tui/compare/v0.3.4...v0.3.5
+[0.3.4]: https://github.com/Dicklesworthstone/source_to_prompt_tui/compare/v0.3.3...v0.3.4
+[0.3.3]: https://github.com/Dicklesworthstone/source_to_prompt_tui/compare/v0.3.2...v0.3.3
 [v0.3.2]: https://github.com/Dicklesworthstone/source_to_prompt_tui/compare/v0.3.1...v0.3.2
 [v0.3.1]: https://github.com/Dicklesworthstone/source_to_prompt_tui/compare/v0.3.0...v0.3.1
 [v0.3.0]: https://github.com/Dicklesworthstone/source_to_prompt_tui/commits/v0.3.0

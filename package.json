@@ -1,6 +1,6 @@
 {
   "name": "source2prompt-tui",
-  "version": "0.3.4",
+  "version": "0.3.5",
   "description": "World-class TUI for combining source code files into LLM-ready prompts (Bun + TypeScript + Ink).",
   "license": "MIT",
   "type": "module",
@@ -25,20 +25,20 @@
   "dependencies": {
     "csso": "^5.0.5",
     "html-minifier-terser": "^7.2.0",
-    "ignore": "^5.3.2",
+    "ignore": "^7.0.16",
     "ink": "^5.2.1",
     "ink-gradient": "^3.0.0",
     "ink-spinner": "^5.0.0",
     "ink-syntax-highlight": "^2.0.2",
     "ink-text-input": "^6.0.0",
     "react": "^18.3.1",
-    "terser": "^5.46.0",
+    "terser": "^5.51.4",
     "tiktoken": "^1.0.22"
   },
   "devDependencies": {
-    "@types/node": "^22.19.7",
-    "@types/react": "^18.3.27",
-    "react-devtools-core": "^7.0.1",
-    "typescript": "^5.9.3"
+    "@types/node": "^26.6.6",
+    "@types/react": "^18.3.31",
+    "react-devtools-core": "^8.0.0",
+    "typescript": "^7.0.2"
   }
 }

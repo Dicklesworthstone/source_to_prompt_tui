@@ -649,11 +649,11 @@ Upgrades prepare the replacement beside the destination, on the same filesystem,
 For a required, pinned release check:
 
 ```bash
-bash install.sh --version v0.3.4 --verify
+bash install.sh --version v0.3.5 --verify
 ```
 
 ```powershell
-.\install.ps1 -Version v0.3.4 -Verify
+.\install.ps1 -Version v0.3.5 -Verify
 ```
 
 You can also verify manually:
